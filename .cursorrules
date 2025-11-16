@@ -1,0 +1,161 @@
+# Cursor Rules for LocaMaster Pro V2
+
+## Project Context
+This is a Next.js 15 equipment rental management system with TypeScript, Tailwind CSS v4, and Shadcn/ui. The system manages equipment rentals, contracts, billing, customers, and provides comprehensive business management for rental companies.
+
+## Code Standards
+- Always use TypeScript with strict mode enabled
+- Implement proper error handling with try-catch blocks
+- Follow OWASP Top 10 security guidelines religiously
+- Validate all inputs with Zod schemas before processing
+- Use async/await pattern instead of promises when possible
+- Keep components small (<150 lines) and focused on single responsibility
+- Use proper TypeScript generics and avoid 'any' type
+
+## Security First (CRITICAL)
+- Never expose sensitive data (passwords, tokens, financial data) in logs or responses
+- Always sanitize user inputs to prevent XSS attacks
+- Implement rate limiting on all API endpoints (100 req/min)
+- Use HTTPS everywhere in production
+- Configure security headers (CSP, HSTS, X-Frame-Options)
+- Validate permissions before allowing access to sensitive operations
+- Implement audit logging for all critical actions (billing, contracts, user management)
+
+## Architecture Patterns
+- Use domain-driven design for feature organization
+- Implement repository pattern for data access
+- Use factory pattern for complex object creation (contracts, invoices)
+- Apply SOLID principles in class design
+- Implement proper separation of concerns
+
+## Equipment Rental Business Logic
+- Always check equipment availability before creating rentals
+- Implement proper contract state management (draft, active, completed, cancelled)
+- Calculate rental prices based on duration, equipment type, and customer tier
+- Handle equipment maintenance schedules and availability
+- Implement late return penalties and damage assessments
+- Support multiple pricing models (daily, weekly, monthly rates)
+
+## Performance Requirements
+- Implement lazy loading for heavy components (equipment lists, customer grids)
+- Use React.memo() for components that re-render frequently
+- Optimize bundle size - analyze imports and remove unused dependencies
+- Implement virtual scrolling for large datasets (1000+ items)
+- Use Next.js Image component for all images with proper optimization
+- Configure caching strategies (API responses, static assets)
+- Monitor Core Web Vitals (LCP < 2.5s, FID < 100ms, CLS < 0.1)
+
+## API Design
+- Use RESTful conventions with proper HTTP methods
+- Implement consistent error response format
+- Return standard envelope: { success: boolean, data?: T, error?: ErrorObject }
+- Use proper HTTP status codes (200, 201, 400, 401, 404, 500)
+- Implement pagination for all list endpoints
+- Add request/response validation middleware
+- Document all endpoints with OpenAPI/Swagger comments
+
+## Database/Storage Patterns
+- Use Prisma ORM for type-safe database operations
+- Implement proper relationship handling (equipment -> rentals -> customers)
+- Use transactions for multi-table operations (contract creation, billing)
+- Implement soft deletes for audit trail
+- Use proper indexing for frequently queried fields
+- Handle concurrent access with optimistic locking
+
+## Testing Requirements
+- Write unit tests for all business logic functions
+- Implement integration tests for API endpoints  
+- Add E2E tests for critical user flows (create rental, generate invoice)
+- Maintain minimum 80% code coverage
+- Test error scenarios and edge cases
+- Mock external dependencies properly
+
+## Component Development
+- Start every component with proper TypeScript interfaces
+- Implement proper loading states and error boundaries
+- Add accessibility attributes (aria-labels, roles, etc.)
+- Use Shadcn/ui components as base, customize with Tailwind
+- Implement proper form validation with React Hook Form + Zod
+- Add proper error handling and user feedback
+
+## File Organization
+```
+src/
+├── app/                 # Next.js app router
+├── components/
+│   ├── ui/             # Reusable UI components
+│   ├── features/       # Business domain components
+│   └── layout/         # Layout components
+├── lib/
+│   ├── auth/           # Authentication logic
+│   ├── db/             # Database/storage layer
+│   ├── validations/    # Zod schemas
+│   └── utils/          # Utility functions
+├── hooks/              # Custom React hooks
+└── types/              # TypeScript type definitions
+```
+
+## Before Committing
+1. Run TypeScript check: `npm run type-check` (must pass)
+2. Run linter: `npm run lint` (must pass)
+3. Run tests: `npm run test` (must pass with >80% coverage)
+4. Check bundle size: `npm run analyze` (initial bundle <500KB)
+5. Verify security: `npm audit` (no high/critical vulnerabilities)
+6. Update documentation if APIs or major features changed
+7. Ensure all environment variables are properly configured
+8. Verify all database migrations are included
+
+## AI Assistant Behavior
+- Always consider security implications of any code changes
+- Suggest performance optimizations proactively
+- Maintain consistent code style throughout the project
+- Update tests when changing existing functionality
+- Document complex business logic with clear comments
+- Implement proper error handling for all async operations
+- Validate all user inputs before processing
+- Consider accessibility in all UI components
+- Suggest better TypeScript types when 'any' is used
+- Recommend proper caching strategies for data fetching
+
+## Business Domain Knowledge
+- Equipment can have multiple states: available, rented, maintenance, retired
+- Contracts can span multiple equipment items with different rental periods
+- Billing cycles are configurable (daily, weekly, monthly cutoffs)
+- Late returns incur penalty fees based on equipment value and delay duration
+- Equipment maintenance schedules affect availability
+- Customer credit limits impact rental approvals
+- Seasonal pricing variations may apply to certain equipment categories
+- Insurance requirements vary by equipment type and rental duration
+
+## Error Handling Patterns
+```typescript
+// Standard error boundary implementation
+class FeatureErrorBoundary extends ErrorBoundary {
+  fallback = ({ error, resetErrorBoundary }) => (
+    <ErrorFallback error={error} onReset={resetErrorBoundary} />
+  );
+}
+
+// API error handling
+try {
+  const result = await apiCall();
+  return { success: true, data: result };
+} catch (error) {
+  logger.error('Operation failed', { error, context });
+  return { 
+    success: false, 
+    error: { 
+      code: 'OPERATION_FAILED', 
+      message: 'User-friendly message' 
+    } 
+  };
+}
+```
+
+## Performance Monitoring
+- Implement Core Web Vitals tracking
+- Monitor API response times and error rates
+- Track bundle size and loading performance
+- Set up alerts for performance regressions
+- Use React DevTools Profiler for optimization
+- Monitor memory usage in long-running sessions
