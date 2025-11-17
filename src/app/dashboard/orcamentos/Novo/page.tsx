@@ -1,12 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Badge } from "@/components/ui/badge"
 import {
   Select,
   SelectContent,
@@ -16,19 +15,13 @@ import {
 } from "@/components/ui/select"
 import { 
   Plus,
-  Minus,
   Calculator,
   Send,
   Save,
   Eye,
   Package,
-  Calendar,
-  DollarSign,
   User,
   FileText,
-  Mail,
-  Phone,
-  MapPin,
   X
 } from "lucide-react"
 
@@ -63,7 +56,7 @@ export default function NovoOrcamentoPage() {
   const [diasLocacao, setDiasLocacao] = useState(1)
   const [desconto, setDesconto] = useState(0)
   const [observacoes, setObservacoes] = useState("")
-  const [tipoCliente, setTipoCliente] = useState("existente") // existente ou novo
+  const [tipoCliente, setTipoCliente] = useState("existente")
 
   // Mock data - em produção virá do banco
   const clientes = [
@@ -231,10 +224,7 @@ export default function NovoOrcamentoPage() {
                     <SelectContent>
                       {clientes.map((cli) => (
                         <SelectItem key={cli.id} value={cli.id}>
-                          <div className="flex flex-col">
-                            <span className="font-medium">{cli.nome}</span>
-                            <span className="text-sm text-gray-500">{cli.email} • {cli.telefone}</span>
-                          </div>
+                          {cli.nome} - {cli.email} • {cli.telefone}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -317,12 +307,7 @@ export default function NovoOrcamentoPage() {
                     <SelectContent>
                       {equipamentos.map((equip) => (
                         <SelectItem key={equip.id} value={equip.id}>
-                          <div className="flex flex-col">
-                            <span className="font-medium">{equip.nome}</span>
-                            <span className="text-sm text-gray-500">
-                              R$ {equip.valorDiario.toFixed(2)}/dia • {equip.disponivel} disponível
-                            </span>
-                          </div>
+                          {equip.nome} - R$ {equip.valorDiario.toFixed(2)}/dia • {equip.disponivel} disponível
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -430,7 +415,7 @@ export default function NovoOrcamentoPage() {
                     value={observacoes}
                     onChange={(e) => setObservacoes(e.target.value)}
                     placeholder="Condições especiais, prazos de entrega, etc..."
-                    className="hover:border-blue-400 transition-colors min-h-[100px]"
+                    className="hover:border-blue-400 transition-colors"
                   />
                 </div>
               </div>

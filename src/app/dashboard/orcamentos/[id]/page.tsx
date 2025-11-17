@@ -115,10 +115,10 @@ export default function VisualizarOrcamentoPage() {
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
-      pendente: { label: "⏳ Pendente", color: "bg-yellow-100 text-yellow-800 border-yellow-300" },
-      aprovado: { label: "✅ Aprovado", color: "bg-green-100 text-green-800 border-green-300" },
-      recusado: { label: "❌ Recusado", color: "bg-red-100 text-red-800 border-red-300" },
-      vencido: { label: "⏰ Vencido", color: "bg-gray-100 text-gray-800 border-gray-300" }
+      pendente: { label: "⏳ Pendente", variant: "secondary" as const },
+      aprovado: { label: "✅ Aprovado", variant: "default" as const },
+      recusado: { label: "❌ Recusado", variant: "destructive" as const },
+      vencido: { label: "⏰ Vencido", variant: "outline" as const }
     }
     return statusConfig[status as keyof typeof statusConfig]
   }
@@ -151,6 +151,8 @@ export default function VisualizarOrcamentoPage() {
     (new Date(orcamento.dataVencimento).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
   )
 
+  const statusBadge = getStatusBadge(orcamento.status)
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -165,11 +167,11 @@ export default function VisualizarOrcamentoPage() {
           </p>
         </div>
         <div className="flex items-center space-x-3">
-          <Badge className={getStatusBadge(orcamento.status).color}>
-            {getStatusBadge(orcamento.status).label}
+          <Badge variant={statusBadge.variant}>
+            {statusBadge.label}
           </Badge>
           {diasRestantes > 0 && orcamento.status === "pendente" && (
-            <Badge variant="outline" className="border-orange-300 text-orange-700">
+            <Badge variant="outline">
               ⏰ {diasRestantes} dias restantes
             </Badge>
           )}
@@ -303,7 +305,7 @@ export default function VisualizarOrcamentoPage() {
                   value={motivoRecusa}
                   onChange={(e) => setMotivoRecusa(e.target.value)}
                   placeholder="Descreva o motivo da recusa do orçamento..."
-                  className="min-h-[100px] border-red-200 focus:border-red-400"
+                  className="border-red-200 focus:border-red-400"
                 />
                 <div className="flex space-x-3">
                   <Button

@@ -117,10 +117,10 @@ export default function OrcamentosPage() {
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
-      pendente: { label: "Pendente", variant: "secondary" as const, color: "bg-yellow-100 text-yellow-800" },
-      aprovado: { label: "Aprovado", variant: "default" as const, color: "bg-green-100 text-green-800" },
-      recusado: { label: "Recusado", variant: "destructive" as const, color: "bg-red-100 text-red-800" },
-      vencido: { label: "Vencido", variant: "outline" as const, color: "bg-gray-100 text-gray-800" }
+      pendente: { label: "Pendente", variant: "secondary" as const },
+      aprovado: { label: "Aprovado", variant: "default" as const },
+      recusado: { label: "Recusado", variant: "destructive" as const },
+      vencido: { label: "Vencido", variant: "outline" as const }
     }
     return statusConfig[status as keyof typeof statusConfig] || statusConfig.pendente
   }
@@ -198,7 +198,7 @@ export default function OrcamentosPage() {
         ))}
       </div>
 
-      {/* Filtros e Busca */}
+      {/* Lista de Orçamentos */}
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0">
@@ -246,7 +246,7 @@ export default function OrcamentosPage() {
                     <div className="flex-1 space-y-2">
                       <div className="flex items-center space-x-3">
                         <h3 className="font-semibold text-lg">#{orcamento.id}</h3>
-                        <Badge className={statusConfig.color}>
+                        <Badge variant={statusConfig.variant}>
                           {statusConfig.label}
                         </Badge>
                       </div>

@@ -15,15 +15,11 @@ import {
   Search,
   Calendar,
   TrendingUp,
-  AlertCircle,
   CheckCircle,
   ChevronDown,
   LogOut,
   User,
-  Palette,
-  Moon,
-  Sun,
-  Calculator // ✅ NOVO: Ícone para Orçamentos
+  Calculator
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -34,7 +30,7 @@ interface DashboardLayoutProps {
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
-  { name: 'Orçamentos', href: '/dashboard/orcamentos', icon: Calculator, badge: 'NEW' }, // ✅ NOVO: Menu Orçamentos
+  { name: 'Orçamentos', href: '/dashboard/orcamentos', icon: Calculator, badge: 'NEW' },
   { name: 'Equipamentos', href: '/dashboard/equipamentos', icon: Package },
   { name: 'Clientes', href: '/dashboard/clientes', icon: Users },
   { name: 'Locações', href: '/dashboard/locacoes', icon: FileText },
@@ -45,7 +41,6 @@ const navigation = [
 ]
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
-  // ✅ CORREÇÃO: Menu dinâmico - não fica travado no Dashboard
   const pathname = usePathname()
   const [showProfileMenu, setShowProfileMenu] = useState(false)
 
@@ -66,11 +61,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
         </div>
 
-        {/* Navigation - ✅ MENU DINÂMICO CORRIGIDO */}
+        {/* Navigation */}
         <nav className="mt-6 px-4">
           <div className="space-y-2">
             {navigation.map((item) => {
-              // ✅ CORREÇÃO: Menu baseado na rota atual, não travado
               const isActive = pathname === item.href
               return (
                 <Link
@@ -104,7 +98,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
         </nav>
 
-        {/* Enhanced Stats Quick View - ✅ INCLUINDO ORÇAMENTOS */}
+        {/* Enhanced Stats Quick View */}
         <div className="mt-8 px-4">
           <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-xl p-4 border border-blue-100">
             <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center">
@@ -112,7 +106,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               Status em Tempo Real
             </h3>
             <div className="space-y-3">
-              {/* ✅ NOVO: Card de Orçamentos Pendentes */}
               <div className="flex items-center justify-between p-3 bg-white rounded-lg shadow-sm border-l-4 border-purple-400 hover:shadow-lg hover:scale-[1.02] transition-all duration-200 cursor-pointer">
                 <div className="flex items-center">
                   <div className="w-3 h-3 bg-purple-500 rounded-full mr-3 animate-pulse"></div>
@@ -121,7 +114,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <span className="font-bold text-purple-600 text-lg">5</span>
               </div>
 
-              {/* ✅ CORREÇÃO: Bordas coloridas suaves em vez de pretas */}
               <div className="flex items-center justify-between p-3 bg-white rounded-lg shadow-sm border-l-4 border-green-400 hover:shadow-lg hover:scale-[1.02] transition-all duration-200 cursor-pointer">
                 <div className="flex items-center">
                   <div className="w-3 h-3 bg-green-500 rounded-full mr-3 animate-pulse"></div>
@@ -160,7 +152,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
       {/* Main content */}
       <div className="pl-72">
-        {/* Enhanced Top header */}
+        {/* Top header */}
         <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-40">
           <div className="px-6 py-4">
             <div className="flex items-center justify-between">
@@ -170,7 +162,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                   <Input
                     type="search"
-                    placeholder="Buscar equipamentos, clientes, orçamentos..." // ✅ ATUALIZADO: Incluindo orçamentos na busca
+                    placeholder="Buscar equipamentos, clientes, orçamentos..."
                     className="pl-10 pr-4 bg-gray-50 border-gray-200 focus:bg-white focus:border-blue-300 hover:border-blue-300 hover:shadow-sm transition-all duration-200"
                   />
                 </div>
@@ -178,7 +170,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
               {/* Header actions */}
               <div className="flex items-center space-x-4">
-                {/* ✅ CORREÇÃO: Hover effects nos botões */}
                 <div className="flex items-center space-x-2">
                   <Button 
                     variant="outline" 
@@ -190,7 +181,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   </Button>
                 </div>
 
-                {/* ✅ NOVO: Notificação de orçamentos pendentes */}
+                {/* Notificação de orçamentos pendentes */}
                 <div className="relative">
                   <Button 
                     variant="ghost" 
@@ -202,7 +193,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   </Button>
                 </div>
                 
-                {/* ✅ CORREÇÃO: Menu de perfil completo */}
+                {/* Menu de perfil */}
                 <div className="relative">
                   <div 
                     className="flex items-center space-x-3 pl-4 border-l border-gray-200 cursor-pointer hover:bg-gray-50 rounded-lg p-2 transition-all duration-200 hover:shadow-sm"
@@ -222,9 +213,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                     />
                   </div>
 
-                  {/* ✅ DROPDOWN MENU COMPLETO */}
+                  {/* Dropdown Menu */}
                   {showProfileMenu && (
-                    <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-50 animate-in slide-in-from-top-2 duration-200">
+                    <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-gray-200 py-2 z-50">
                       
                       {/* Header do menu */}
                       <div className="px-4 py-3 border-b border-gray-100">
@@ -254,14 +245,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                           className="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors duration-200 flex items-center"
                           onClick={() => setShowProfileMenu(false)}
                         >
-                          <Palette className="w-4 h-4 mr-3 text-gray-400" />
-                          Personalizar Tema
-                        </button>
-
-                        <button 
-                          className="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors duration-200 flex items-center"
-                          onClick={() => setShowProfileMenu(false)}
-                        >
                           <Bell className="w-4 h-4 mr-3 text-gray-400" />
                           Notificações
                         </button>
@@ -273,7 +256,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                           className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors duration-200 flex items-center"
                           onClick={() => {
                             setShowProfileMenu(false)
-                            // Aqui você pode adicionar a lógica de logout
                             console.log('Fazendo logout...')
                           }}
                         >
@@ -289,7 +271,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
         </header>
 
-        {/* Page content with better spacing */}
+        {/* Page content */}
         <main className="py-8">
           <div className="px-6">
             {children}
