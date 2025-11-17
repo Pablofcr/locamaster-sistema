@@ -22,7 +22,8 @@ import {
   User,
   Palette,
   Moon,
-  Sun
+  Sun,
+  Calculator // ✅ NOVO: Ícone para Orçamentos
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -33,17 +34,18 @@ interface DashboardLayoutProps {
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
+  { name: 'Orçamentos', href: '/dashboard/orcamentos', icon: Calculator, badge: 'NEW' }, // ✅ NOVO: Menu Orçamentos
   { name: 'Equipamentos', href: '/dashboard/equipamentos', icon: Package },
   { name: 'Clientes', href: '/dashboard/clientes', icon: Users },
   { name: 'Locações', href: '/dashboard/locacoes', icon: FileText },
   { name: 'Faturamento', href: '/dashboard/faturamento', icon: DollarSign },
   { name: 'Relatórios', href: '/dashboard/relatorios', icon: BarChart3 },
-  { name: 'Premium', href: '/dashboard/premium', icon: TrendingUp, badge: 'NEW' },
+  { name: 'Premium', href: '/dashboard/premium', icon: TrendingUp, badge: 'HOT' },
   { name: 'Configurações', href: '/dashboard/configuracoes', icon: Settings },
 ]
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
-  // ✅ CORREÇÃO 1: Menu dinâmico - não fica travado no Dashboard
+  // ✅ CORREÇÃO: Menu dinâmico - não fica travado no Dashboard
   const pathname = usePathname()
   const [showProfileMenu, setShowProfileMenu] = useState(false)
 
@@ -88,7 +90,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   />
                   {item.name}
                   {item.badge && (
-                    <span className="ml-auto px-2 py-1 text-xs font-bold bg-gradient-to-r from-green-400 to-green-500 text-white rounded-full animate-pulse">
+                    <span className={`ml-auto px-2 py-1 text-xs font-bold rounded-full animate-pulse ${
+                      item.badge === 'NEW' 
+                        ? 'bg-gradient-to-r from-green-400 to-green-500 text-white'
+                        : 'bg-gradient-to-r from-red-400 to-red-500 text-white'
+                    }`}>
                       {item.badge}
                     </span>
                   )}
@@ -98,7 +104,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
         </nav>
 
-        {/* Enhanced Stats Quick View - ✅ BORDAS COLORIDAS SUAVES */}
+        {/* Enhanced Stats Quick View - ✅ INCLUINDO ORÇAMENTOS */}
         <div className="mt-8 px-4">
           <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-xl p-4 border border-blue-100">
             <h3 className="text-sm font-bold text-gray-800 mb-4 flex items-center">
@@ -106,7 +112,16 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               Status em Tempo Real
             </h3>
             <div className="space-y-3">
-              {/* ✅ CORREÇÃO 2: Bordas coloridas suaves em vez de pretas */}
+              {/* ✅ NOVO: Card de Orçamentos Pendentes */}
+              <div className="flex items-center justify-between p-3 bg-white rounded-lg shadow-sm border-l-4 border-purple-400 hover:shadow-lg hover:scale-[1.02] transition-all duration-200 cursor-pointer">
+                <div className="flex items-center">
+                  <div className="w-3 h-3 bg-purple-500 rounded-full mr-3 animate-pulse"></div>
+                  <span className="text-gray-600 text-sm font-medium">Orçamentos pendentes</span>
+                </div>
+                <span className="font-bold text-purple-600 text-lg">5</span>
+              </div>
+
+              {/* ✅ CORREÇÃO: Bordas coloridas suaves em vez de pretas */}
               <div className="flex items-center justify-between p-3 bg-white rounded-lg shadow-sm border-l-4 border-green-400 hover:shadow-lg hover:scale-[1.02] transition-all duration-200 cursor-pointer">
                 <div className="flex items-center">
                   <div className="w-3 h-3 bg-green-500 rounded-full mr-3 animate-pulse"></div>
@@ -155,7 +170,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                   <Input
                     type="search"
-                    placeholder="Buscar equipamentos, clientes, contratos..."
+                    placeholder="Buscar equipamentos, clientes, orçamentos..." // ✅ ATUALIZADO: Incluindo orçamentos na busca
                     className="pl-10 pr-4 bg-gray-50 border-gray-200 focus:bg-white focus:border-blue-300 hover:border-blue-300 hover:shadow-sm transition-all duration-200"
                   />
                 </div>
@@ -163,7 +178,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
               {/* Header actions */}
               <div className="flex items-center space-x-4">
-                {/* ✅ CORREÇÃO 3: Hover effects nos botões */}
+                {/* ✅ CORREÇÃO: Hover effects nos botões */}
                 <div className="flex items-center space-x-2">
                   <Button 
                     variant="outline" 
@@ -175,7 +190,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   </Button>
                 </div>
 
-                {/* Notifications */}
+                {/* ✅ NOVO: Notificação de orçamentos pendentes */}
                 <div className="relative">
                   <Button 
                     variant="ghost" 
@@ -187,7 +202,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   </Button>
                 </div>
                 
-                {/* ✅ CORREÇÃO 4: Menu de perfil completo */}
+                {/* ✅ CORREÇÃO: Menu de perfil completo */}
                 <div className="relative">
                   <div 
                     className="flex items-center space-x-3 pl-4 border-l border-gray-200 cursor-pointer hover:bg-gray-50 rounded-lg p-2 transition-all duration-200 hover:shadow-sm"
