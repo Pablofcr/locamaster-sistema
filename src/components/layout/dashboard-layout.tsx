@@ -46,7 +46,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               <span className="text-blue-600 font-bold text-xl">LM</span>
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white">LocaMaster Pro</h1>
+              <h1 className="text-xl font-bold text-white">LocaMaster Pro V2.0</h1>
               <p className="text-blue-100 text-sm font-medium">v2.0 Premium</p>
             </div>
           </div>
