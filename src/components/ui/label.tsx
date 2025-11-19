@@ -1,18 +1,14 @@
-import { ReactNode } from "react"
+import { LabelHTMLAttributes, forwardRef } from "react"
 
-interface LabelProps {
-  children: ReactNode
-  htmlFor?: string
-  className?: string
-}
-
-export function Label({ children, htmlFor, className = "" }: LabelProps) {
-  return (
-    <label 
-      htmlFor={htmlFor}
-      className={`block text-sm font-medium text-gray-700 mb-1 ${className}`}
-    >
-      {children}
-    </label>
+const Label = forwardRef<HTMLLabelElement, LabelHTMLAttributes<HTMLLabelElement>>(
+  ({ className = "", ...props }, ref) => (
+    <label
+      ref={ref}
+      className={`text-sm font-medium text-gray-700 ${className}`}
+      {...props}
+    />
   )
-}
+)
+Label.displayName = "Label"
+
+export { Label }

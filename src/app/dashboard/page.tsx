@@ -1,23 +1,31 @@
 export default function DashboardPage() {
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-          📊 Dashboard
-        </h1>
-        <p className="text-gray-600 mt-1">Visão geral do sistema de locação</p>
+        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+        <p className="text-gray-600">Bem-vindo ao LocaMaster Pro</p>
       </div>
       
-      <div className="text-center py-12">
-        <h2 className="text-xl font-semibold text-gray-700 mb-4">
-          🚀 Sistema LocaMaster Pro
-        </h2>
-        <p className="text-gray-600">
-          Dashboard principal será implementado aqui com métricas e gráficos.
-        </p>
-        <p className="text-gray-500 text-sm mt-2">
-          Por enquanto, acesse <strong>Orçamentos</strong> para ver o sistema completo funcionando!
-        </p>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900">Total de Orçamentos</h3>
+          <p className="text-3xl font-bold text-blue-600 mt-2">23</p>
+        </div>
+        
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900">Valor Total</h3>
+          <p className="text-3xl font-bold text-green-600 mt-2">R$ 127.500</p>
+        </div>
+        
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900">Taxa de Conversão</h3>
+          <p className="text-3xl font-bold text-purple-600 mt-2">78%</p>
+        </div>
+        
+        <div className="bg-white rounded-lg shadow p-6">
+          <h3 className="text-lg font-semibold text-gray-900">Tempo Médio</h3>
+          <p className="text-3xl font-bold text-orange-600 mt-2">2.3 dias</p>
+        </div>
       </div>
     </div>
   )

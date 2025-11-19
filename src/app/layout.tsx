@@ -5,8 +5,8 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'LocaMaster Pro - Sistema de Locação',
-  description: 'Sistema completo para gestão de locação de equipamentos',
+  title: 'LocaMaster Pro',
+  description: 'Sistema de gestão de locações',
 }
 
 export default function RootLayout({

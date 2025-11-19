@@ -1,24 +1,23 @@
-import { ReactNode } from "react"
+import { HTMLAttributes } from "react"
 
-interface BadgeProps {
-  children: ReactNode
-  className?: string
+interface BadgeProps extends HTMLAttributes<HTMLDivElement> {
   variant?: "default" | "secondary" | "destructive" | "outline"
 }
 
-export function Badge({ children, className = "", variant = "default" }: BadgeProps) {
-  const baseClasses = "inline-flex items-center px-2 py-1 text-xs font-medium rounded-full"
-  
-  const variantClasses = {
+function Badge({ className = "", variant = "default", ...props }: BadgeProps) {
+  const variants = {
     default: "bg-blue-100 text-blue-800",
-    secondary: "bg-gray-100 text-gray-800", 
+    secondary: "bg-gray-100 text-gray-800",
     destructive: "bg-red-100 text-red-800",
     outline: "border border-gray-300 text-gray-700"
   }
 
   return (
-    <span className={`${baseClasses} ${variantClasses[variant]} ${className}`}>
-      {children}
-    </span>
+    <div
+      className={`inline-flex items-center px-2 py-1 text-xs font-medium rounded-full ${variants[variant]} ${className}`}
+      {...props}
+    />
   )
 }
+
+export { Badge }
