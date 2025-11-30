@@ -134,9 +134,9 @@ export default function ManutencaoPage() {
   const getTipoBadge = (tipo: string) => {
     switch (tipo) {
       case 'preventiva':
-        return <Badge variant="outline" className="border-blue-300 text-blue-600">🛡️ Preventiva</Badge>
+        return <Badge variant="secondary" className="border-blue-300 text-blue-600">🛡️ Preventiva</Badge>
       case 'corretiva':
-        return <Badge variant="outline" className="border-orange-300 text-orange-600">🔨 Corretiva</Badge>
+        return <Badge variant="secondary" className="border-orange-300 text-orange-600">🔨 Corretiva</Badge>
       default:
         return <Badge variant="secondary">❓ Indefinido</Badge>
     }
