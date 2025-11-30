@@ -75,7 +75,7 @@ export default function EquipamentosPage() {
   const [filtroStatus, setFiltroStatus] = useState('todos')
   const [filtroCategoria, setFiltroCategoria] = useState('todas')
 
-  const categorias = [...new Set(equipamentosMock.map(eq => eq.categoria))]
+  const categorias = Array.from(new Set(equipamentosMock.map(eq => eq.categoria)))
 
   const equipamentosFiltrados = equipamentosMock.filter(equipamento => {
     const matchSearch = equipamento.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
