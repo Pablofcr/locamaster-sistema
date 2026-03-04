@@ -34,10 +34,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         <div className="flex items-center justify-center h-16 px-4 bg-gradient-to-r from-blue-600 to-blue-500 flex-shrink-0">
           <div className="flex items-center space-x-2">
             <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-              <span className="text-blue-600 font-bold text-lg">LS</span>
+              <span className="text-blue-600 font-bold text-lg">LM</span>
             </div>
             <div className="text-white">
-              <h1 className="text-lg font-bold">LocaSys Pro</h1>
+              <h1 className="text-lg font-bold">LocaMaster</h1>
               <p className="text-xs text-blue-100">Sistema de Gestão</p>
             </div>
           </div>
@@ -101,7 +101,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
           {/* Info Box */}
           <div className="mt-4 mx-4 p-3 bg-gray-50 rounded-lg border mb-4">
-            <h3 className="text-xs font-medium text-gray-600 mb-2">🎯 LocaSys Pro</h3>
+            <h3 className="text-xs font-medium text-gray-600 mb-2">🎯 LocaMaster</h3>
             <div className="space-y-1 text-xs text-gray-500">
               <div>Sistema SaaS</div>
               <div>Múltiplas Empresas</div>
@@ -135,7 +135,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 </button>
                 <div className="flex items-center space-x-3">
                   <div className="text-right">
-                    <p className="text-sm font-medium text-gray-900">LocaSys Pro</p>
+                    <p className="text-sm font-medium text-gray-900">LocaMaster</p>
                     <p className="text-xs text-gray-500">Administrador</p>
                   </div>
                   <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
