@@ -1,240 +1,182 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-
-const relatoriosMock = [
-  { id: 1, nome: 'Relatório Mensal de Receita', tipo: 'financeiro', periodo: 'Novembro 2024', arquivo: 'receita-nov-2024.pdf' },
-  { id: 2, nome: 'Equipamentos por Status', tipo: 'operacional', periodo: 'Última semana', arquivo: 'equipamentos-status.xlsx' },
-  { id: 3, nome: 'Clientes Mais Rentáveis', tipo: 'comercial', periodo: 'Últimos 6 meses', arquivo: 'clientes-top.pdf' },
-  { id: 4, nome: 'Análise de Locações', tipo: 'operacional', periodo: 'Outubro 2024', arquivo: 'locacoes-out-2024.xlsx' }
-]
+import { useToast } from '@/components/ui/Toast'
+import { supabase } from '@/lib/supabase'
 
 export default function RelatoriosPage() {
-  const [filtroTipo, setFiltroTipo] = useState('todos')
+  const { showToast } = useToast()
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState({
+    receitaMes: 0, taxaOcupacao: 0, ticketMedio: 0, novosClientes: 0,
+    totalEquipamentos: 0, equipamentosLocados: 0
+  })
   const [periodoInicio, setPeriodoInicio] = useState('')
   const [periodoFim, setPeriodoFim] = useState('')
 
-  const dadosGraficos = {
-    receita: [
-      { mes: 'Jun', valor: 45200 },
-      { mes: 'Jul', valor: 52800 },
-      { mes: 'Ago', valor: 38900 },
-      { mes: 'Set', valor: 61500 },
-      { mes: 'Out', valor: 47300 },
-      { mes: 'Nov', valor: 55600 }
-    ],
-    equipamentos: [
-      { categoria: 'Escavação', total: 8, disponivel: 6, locado: 2 },
-      { categoria: 'Concreto', total: 15, disponivel: 12, locado: 3 },
-      { categoria: 'Energia', total: 6, disponivel: 4, locado: 2 },
-      { categoria: 'Pneumática', total: 10, disponivel: 8, locado: 2 }
-    ]
+  useEffect(() => { carregarDados() }, [])
+
+  const carregarDados = async () => {
+    setLoading(true)
+    try {
+      const [fatRes, eqRes, cliRes, orcRes] = await Promise.all([
+        supabase.from('faturas').select('valor, status, data_pagamento'),
+        supabase.from('equipamentos').select('status, ativo').eq('ativo', true),
+        supabase.from('clientes').select('created_at'),
+        supabase.from('orcamentos').select('valor_total, status')
+      ])
+
+      const faturas = fatRes.data || []
+      const equipamentos = eqRes.data || []
+      const clientes = cliRes.data || []
+      const orcamentos = orcRes.data || []
+
+      const mesAtual = new Date().getMonth()
+      const anoAtual = new Date().getFullYear()
+
+      const receitaMes = faturas
+        .filter(f => f.status === 'pago' && f.data_pagamento)
+        .filter(f => {
+          const d = new Date(f.data_pagamento)
+          return d.getMonth() === mesAtual && d.getFullYear() === anoAtual
+        })
+        .reduce((s, f) => s + (Number(f.valor) || 0), 0)
+
+      const totalEq = equipamentos.length
+      const locados = equipamentos.filter(e => e.status === 'locado').length
+      const taxaOcupacao = totalEq > 0 ? Math.round((locados / totalEq) * 100) : 0
+
+      const orcAprovados = orcamentos.filter(o => o.status === 'aprovado')
+      const ticketMedio = orcAprovados.length > 0
+        ? orcAprovados.reduce((s, o) => s + (Number(o.valor_total) || 0), 0) / orcAprovados.length
+        : 0
+
+      const novosClientes = clientes.filter(c => {
+        const d = new Date(c.created_at)
+        return d.getMonth() === mesAtual && d.getFullYear() === anoAtual
+      }).length
+
+      setStats({ receitaMes, taxaOcupacao, ticketMedio, novosClientes, totalEquipamentos: totalEq, equipamentosLocados: locados })
+    } catch { showToast('Erro ao carregar dados', 'error') }
+    finally { setLoading(false) }
+  }
+
+  const gerarRelatorioPDF = async (tipo: string) => {
+    try {
+      const { jsPDF } = await import('jspdf')
+      const doc = new jsPDF()
+
+      doc.setFontSize(18)
+      doc.text('LocaMaster - Relatório', 20, 20)
+      doc.setFontSize(12)
+      doc.text(`Tipo: ${tipo}`, 20, 35)
+      doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 20, 45)
+
+      if (periodoInicio && periodoFim) {
+        doc.text(`Período: ${new Date(periodoInicio).toLocaleDateString('pt-BR')} a ${new Date(periodoFim).toLocaleDateString('pt-BR')}`, 20, 55)
+      }
+
+      doc.setFontSize(14)
+      doc.text('Resumo', 20, 75)
+      doc.setFontSize(11)
+
+      const formatarMoeda = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
+
+      let y = 90
+      switch (tipo) {
+        case 'receita':
+          doc.text(`Receita do Mês: ${formatarMoeda(stats.receitaMes)}`, 20, y)
+          doc.text(`Ticket Médio: ${formatarMoeda(stats.ticketMedio)}`, 20, y + 12)
+          break
+        case 'equipamentos':
+          doc.text(`Total Equipamentos: ${stats.totalEquipamentos}`, 20, y)
+          doc.text(`Locados: ${stats.equipamentosLocados}`, 20, y + 12)
+          doc.text(`Taxa de Ocupação: ${stats.taxaOcupacao}%`, 20, y + 24)
+          break
+        case 'clientes':
+          doc.text(`Novos Clientes (mês): ${stats.novosClientes}`, 20, y)
+          break
+        default:
+          doc.text(`Receita: ${formatarMoeda(stats.receitaMes)}`, 20, y)
+          doc.text(`Equipamentos: ${stats.totalEquipamentos}`, 20, y + 12)
+          doc.text(`Taxa Ocupação: ${stats.taxaOcupacao}%`, 20, y + 24)
+          doc.text(`Novos Clientes: ${stats.novosClientes}`, 20, y + 36)
+      }
+
+      doc.save(`relatorio-${tipo}-${new Date().toISOString().split('T')[0]}.pdf`)
+      showToast('Relatório gerado com sucesso!', 'success')
+    } catch (error) {
+      showToast('Erro ao gerar relatório PDF', 'error')
+    }
+  }
+
+  const formatarMoeda = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando relatórios...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">📊 Relatórios</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Relatórios</h1>
           <p className="text-gray-600">Análises e relatórios gerenciais</p>
         </div>
-        <Button className="bg-blue-600 hover:bg-blue-700">
-          📈 Gerar Relatório
-        </Button>
+        <Button onClick={() => gerarRelatorioPDF('geral')}>Gerar Relatório PDF</Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="border-l-4 border-green-500">
           <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Receita Mês</p>
-                <p className="text-xl font-bold text-green-600">R$ 55.600</p>
-                <p className="text-xs text-green-600">+18% vs mês anterior</p>
-              </div>
-              <div className="text-2xl">💰</div>
-            </div>
+            <p className="text-sm font-medium text-gray-600">Receita Mês</p>
+            <p className="text-xl font-bold text-green-600">{formatarMoeda(stats.receitaMes)}</p>
           </CardContent>
         </Card>
-
         <Card className="border-l-4 border-blue-500">
           <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Taxa Ocupação</p>
-                <p className="text-xl font-bold text-blue-600">73%</p>
-                <p className="text-xs text-blue-600">29 de 40 equipamentos</p>
-              </div>
-              <div className="text-2xl">📦</div>
-            </div>
+            <p className="text-sm font-medium text-gray-600">Taxa Ocupação</p>
+            <p className="text-xl font-bold text-blue-600">{stats.taxaOcupacao}%</p>
+            <p className="text-xs text-blue-600">{stats.equipamentosLocados} de {stats.totalEquipamentos} equipamentos</p>
           </CardContent>
         </Card>
-
         <Card className="border-l-4 border-yellow-500">
           <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Ticket Médio</p>
-                <p className="text-xl font-bold text-yellow-600">R$ 185</p>
-                <p className="text-xs text-yellow-600">Por dia de locação</p>
-              </div>
-              <div className="text-2xl">🎯</div>
-            </div>
+            <p className="text-sm font-medium text-gray-600">Ticket Médio</p>
+            <p className="text-xl font-bold text-yellow-600">{formatarMoeda(stats.ticketMedio)}</p>
           </CardContent>
         </Card>
-
         <Card className="border-l-4 border-purple-500">
           <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Novos Clientes</p>
-                <p className="text-xl font-bold text-purple-600">12</p>
-                <p className="text-xs text-purple-600">Este mês</p>
-              </div>
-              <div className="text-2xl">👥</div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-blue-600">📈 Receita por Mês (R$)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {dadosGraficos.receita.map((item, index) => (
-                <div key={index} className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-12 text-sm font-medium">{item.mes}</div>
-                    <div className="flex-1">
-                      <div className="w-full bg-gray-200 rounded-full h-3">
-                        <div 
-                          className="bg-blue-500 h-3 rounded-full" 
-                          style={{width: `${(item.valor / 65000) * 100}%`}}
-                        ></div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-sm font-bold text-blue-600">
-                    {item.valor.toLocaleString()}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-green-600">📦 Equipamentos por Categoria</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {dadosGraficos.equipamentos.map((cat, index) => (
-                <div key={index} className="p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium">{cat.categoria}</span>
-                    <span className="text-sm text-gray-600">{cat.total} total</span>
-                  </div>
-                  <div className="flex space-x-2 text-sm">
-                    <div className="flex items-center space-x-1">
-                      <div className="w-3 h-3 bg-green-500 rounded"></div>
-                      <span>Disponível: {cat.disponivel}</span>
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <div className="w-3 h-3 bg-yellow-500 rounded"></div>
-                      <span>Locado: {cat.locado}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <p className="text-sm font-medium text-gray-600">Novos Clientes</p>
+            <p className="text-xl font-bold text-purple-600">{stats.novosClientes}</p>
+            <p className="text-xs text-purple-600">Este mês</p>
           </CardContent>
         </Card>
       </div>
 
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>📋 Relatórios Gerados</CardTitle>
-            <div className="flex space-x-2">
-              <select 
-                value={filtroTipo}
-                onChange={(e) => setFiltroTipo(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-              >
-                <option value="todos">Todos os Tipos</option>
-                <option value="financeiro">Financeiro</option>
-                <option value="operacional">Operacional</option>
-                <option value="comercial">Comercial</option>
-              </select>
-            </div>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Input
-              placeholder="Data início"
-              type="date"
-              value={periodoInicio}
-              onChange={(e) => setPeriodoInicio(e.target.value)}
-              className="w-40"
-            />
-            <Input
-              placeholder="Data fim"
-              type="date"
-              value={periodoFim}
-              onChange={(e) => setPeriodoFim(e.target.value)}
-              className="w-40"
-            />
-            <Button variant="outline">🔍 Filtrar</Button>
-          </div>
-        </CardHeader>
+        <CardHeader><CardTitle>Gerar Relatório</CardTitle></CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            {relatoriosMock.map((relatorio) => (
-              <div key={relatorio.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
-                <div>
-                  <h3 className="font-medium">{relatorio.nome}</h3>
-                  <div className="flex items-center space-x-4 text-sm text-gray-600 mt-1">
-                    <span>📊 {relatorio.tipo}</span>
-                    <span>📅 {relatorio.periodo}</span>
-                    <span>📄 {relatorio.arquivo}</span>
-                  </div>
-                </div>
-                <div className="flex space-x-2">
-                  <Button variant="outline" size="sm">📄 Visualizar</Button>
-                  <Button variant="outline" size="sm">📥 Download</Button>
-                  <Button variant="outline" size="sm">📧 Enviar</Button>
-                </div>
-              </div>
-            ))}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <Input placeholder="Data início" type="date" value={periodoInicio} onChange={(e) => setPeriodoInicio(e.target.value)} />
+            <Input placeholder="Data fim" type="date" value={periodoFim} onChange={(e) => setPeriodoFim(e.target.value)} />
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>📈 Gerar Novo Relatório</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <select className="px-3 py-2 border border-gray-300 rounded-md">
-              <option value="">Tipo de Relatório</option>
-              <option value="receita">Relatório de Receita</option>
-              <option value="clientes">Análise de Clientes</option>
-              <option value="equipamentos">Status Equipamentos</option>
-              <option value="locacoes">Relatório de Locações</option>
-            </select>
-            <Input placeholder="Data início" type="date" />
-            <Input placeholder="Data fim" type="date" />
-          </div>
-          <div className="mt-4 flex space-x-3">
-            <Button className="bg-blue-600 hover:bg-blue-700">📊 Gerar Relatório</Button>
-            <Button variant="outline">📧 Agendar Envio</Button>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Button onClick={() => gerarRelatorioPDF('receita')} variant="outline">Relatório de Receita</Button>
+            <Button onClick={() => gerarRelatorioPDF('clientes')} variant="outline">Análise de Clientes</Button>
+            <Button onClick={() => gerarRelatorioPDF('equipamentos')} variant="outline">Status Equipamentos</Button>
+            <Button onClick={() => gerarRelatorioPDF('geral')} variant="outline">Relatório Geral</Button>
           </div>
         </CardContent>
       </Card>

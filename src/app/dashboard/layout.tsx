@@ -1,4 +1,7 @@
+'use client'
+
 import DashboardLayout from '@/components/layout/DashboardLayout'
+import { ToastProvider } from '@/components/ui/Toast'
 
 export default function Layout({
   children,
@@ -6,8 +9,10 @@ export default function Layout({
   children: React.ReactNode
 }) {
   return (
-    <DashboardLayout>
-      {children}
-    </DashboardLayout>
+    <ToastProvider>
+      <DashboardLayout>
+        {children}
+      </DashboardLayout>
+    </ToastProvider>
   )
 }

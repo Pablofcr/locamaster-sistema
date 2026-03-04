@@ -1,354 +1,219 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
-
-const faturasMock = [
-  {
-    id: 1,
-    numero: 'FAT-2024-001',
-    cliente: 'Construtora Alpha Ltda',
-    dataVencimento: '2024-11-30',
-    dataEmissao: '2024-11-01',
-    valor: 37400.00,
-    status: 'pago',
-    formaPagamento: 'PIX',
-    dataPagamento: '2024-11-28',
-    locacao: 'LOC-2024-001',
-    observacoes: 'Pagamento antecipado'
-  },
-  {
-    id: 2,
-    numero: 'FAT-2024-002',
-    cliente: 'Beta Engenharia',
-    dataVencimento: '2024-12-05',
-    dataEmissao: '2024-11-10',
-    valor: 675.00,
-    status: 'pendente',
-    formaPagamento: '',
-    dataPagamento: '',
-    locacao: 'LOC-2024-002',
-    observacoes: 'Aguardando pagamento'
-  },
-  {
-    id: 3,
-    numero: 'FAT-2024-003',
-    cliente: 'Construtora Gama',
-    dataVencimento: '2024-11-25',
-    dataEmissao: '2024-11-15',
-    valor: 1800.00,
-    status: 'vencido',
-    formaPagamento: '',
-    dataPagamento: '',
-    locacao: 'LOC-2024-003',
-    observacoes: 'Fatura vencida - contatar cliente'
-  },
-  {
-    id: 4,
-    numero: 'FAT-2024-004',
-    cliente: 'Alpha Construções',
-    dataVencimento: '2024-12-10',
-    dataEmissao: '2024-11-20',
-    valor: 150.00,
-    status: 'emitido',
-    formaPagamento: '',
-    dataPagamento: '',
-    locacao: 'LOC-2024-004',
-    observacoes: 'Fatura recém emitida'
-  }
-]
-
-const mesesReceita = [
-  { mes: 'Janeiro', receita: 45200, faturas: 12, taxa: 95 },
-  { mes: 'Fevereiro', receita: 52800, faturas: 15, taxa: 87 },
-  { mes: 'Março', receita: 38900, faturas: 11, taxa: 91 },
-  { mes: 'Abril', receita: 61500, faturas: 18, taxa: 83 },
-  { mes: 'Maio', receita: 47300, faturas: 14, taxa: 92 },
-  { mes: 'Junho', receita: 55600, faturas: 16, taxa: 89 }
-]
+import { useToast } from '@/components/ui/Toast'
+import { supabase } from '@/lib/supabase'
 
 export default function FaturamentoPage() {
+  const { showToast } = useToast()
+  const [faturas, setFaturas] = useState<any[]>([])
+  const [locacoes, setLocacoes] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [showForm, setShowForm] = useState(false)
   const [filtroStatus, setFiltroStatus] = useState('todos')
-  const [filtroMes, setFiltroMes] = useState('todos')
+  const [showForm, setShowForm] = useState(false)
+  const [stats, setStats] = useState({ pago: 0, pendente: 0, vencido: 0, total: 0 })
 
-  const faturasFiltradas = faturasMock.filter(fatura => {
-    const matchSearch = fatura.numero.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       fatura.cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       fatura.locacao.toLowerCase().includes(searchTerm.toLowerCase())
-    
-    const matchStatus = filtroStatus === 'todos' || fatura.status === filtroStatus
-    
-    const matchMes = filtroMes === 'todos' || 
-                    new Date(fatura.dataEmissao).getMonth() === parseInt(filtroMes)
-    
-    return matchSearch && matchStatus && matchMes
+  const [formData, setFormData] = useState({
+    locacao_id: '', valor: '', data_vencimento: '', forma_pagamento: '', observacoes: ''
   })
 
-  const totalReceita = faturasMock.filter(f => f.status === 'pago').reduce((sum, f) => sum + f.valor, 0)
-  const totalPendente = faturasMock.filter(f => f.status === 'pendente').reduce((sum, f) => sum + f.valor, 0)
-  const totalVencido = faturasMock.filter(f => f.status === 'vencido').reduce((sum, f) => sum + f.valor, 0)
+  useEffect(() => { carregarDados() }, [])
 
-  const stats = [
-    { 
-      name: 'Receita Confirmada', 
-      value: `R$ ${totalReceita.toLocaleString()}`, 
-      icon: '💰', 
-      color: 'text-green-600' 
-    },
-    { 
-      name: 'A Receber', 
-      value: `R$ ${totalPendente.toLocaleString()}`, 
-      icon: '⏳', 
-      color: 'text-yellow-600' 
-    },
-    { 
-      name: 'Vencidas', 
-      value: `R$ ${totalVencido.toLocaleString()}`, 
-      icon: '⚠️', 
-      color: 'text-red-600' 
-    },
-    { 
-      name: 'Total Faturas', 
-      value: faturasMock.length, 
-      icon: '📄', 
-      color: 'text-blue-600' 
+  const carregarDados = async () => {
+    setLoading(true)
+    try {
+      const [fatRes, locRes] = await Promise.all([
+        supabase.from('faturas').select('*').order('created_at', { ascending: false }),
+        supabase.from('locacoes').select('id, numero, cliente_nome, valor_total').order('created_at', { ascending: false })
+      ])
+
+      const data = fatRes.data || []
+      setFaturas(data)
+      setLocacoes(locRes.data || [])
+
+      setStats({
+        pago: data.filter(f => f.status === 'pago').reduce((s, f) => s + (Number(f.valor) || 0), 0),
+        pendente: data.filter(f => f.status === 'pendente' || f.status === 'emitido').reduce((s, f) => s + (Number(f.valor) || 0), 0),
+        vencido: data.filter(f => f.status === 'vencido').reduce((s, f) => s + (Number(f.valor) || 0), 0),
+        total: data.length
+      })
+    } catch { showToast('Erro ao carregar faturas', 'error') }
+    finally { setLoading(false) }
+  }
+
+  const criarFatura = async () => {
+    if (!formData.locacao_id || !formData.valor || !formData.data_vencimento) {
+      showToast('Preencha os campos obrigatórios', 'warning'); return
     }
-  ]
+    try {
+      const locacao = locacoes.find(l => l.id === parseInt(formData.locacao_id))
+      const countRes = await supabase.from('faturas').select('*', { count: 'exact', head: true })
+      const numero = `FAT-${new Date().getFullYear()}-${String((countRes.count || 0) + 1).padStart(3, '0')}`
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'pago':
-        return <Badge className="bg-green-100 text-green-800">✅ Pago</Badge>
-      case 'pendente':
-        return <Badge className="bg-yellow-100 text-yellow-800">⏳ Pendente</Badge>
-      case 'vencido':
-        return <Badge className="bg-red-100 text-red-800">⚠️ Vencido</Badge>
-      case 'emitido':
-        return <Badge className="bg-blue-100 text-blue-800">📄 Emitido</Badge>
-      default:
-        return <Badge variant="secondary">❓ Indefinido</Badge>
+      const { error } = await supabase.from('faturas').insert({
+        numero, locacao_id: parseInt(formData.locacao_id),
+        locacao_numero: locacao?.numero || '', cliente_nome: locacao?.cliente_nome || '',
+        data_emissao: new Date().toISOString().split('T')[0],
+        data_vencimento: formData.data_vencimento,
+        valor: parseFloat(formData.valor), status: 'emitido',
+        forma_pagamento: formData.forma_pagamento, observacoes: formData.observacoes
+      })
+      if (error) throw error
+
+      showToast('Fatura gerada com sucesso!', 'success')
+      setShowForm(false)
+      setFormData({ locacao_id: '', valor: '', data_vencimento: '', forma_pagamento: '', observacoes: '' })
+      carregarDados()
+    } catch (error: any) { showToast('Erro ao criar fatura: ' + error.message, 'error') }
+  }
+
+  const marcarPago = async (fatura: any) => {
+    try {
+      await supabase.from('faturas').update({
+        status: 'pago', data_pagamento: new Date().toISOString().split('T')[0],
+        updated_at: new Date().toISOString()
+      }).eq('id', fatura.id)
+      showToast('Fatura marcada como paga!', 'success')
+      carregarDados()
+    } catch { showToast('Erro ao atualizar fatura', 'error') }
+  }
+
+  const cobrar = (fatura: any) => {
+    const phone = (fatura.cliente_telefone || '').replace(/\D/g, '')
+    if (phone) {
+      const msg = encodeURIComponent(`Olá ${fatura.cliente_nome}, informamos que a fatura ${fatura.numero} no valor de ${formatarMoeda(Number(fatura.valor))} encontra-se pendente. Por favor, regularize o pagamento.`)
+      window.open(`https://wa.me/55${phone}?text=${msg}`)
+    } else {
+      showToast('Telefone do cliente não disponível', 'warning')
     }
   }
 
-  const calcularDiasVencimento = (dataVencimento: string) => {
-    const hoje = new Date()
-    const venc = new Date(dataVencimento)
-    const diffTime = venc.getTime() - hoje.getTime()
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-    return diffDays
+  const formatarMoeda = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
+
+  const getStatusBadge = (status: string) => {
+    const c: Record<string, { label: string; color: string }> = {
+      pago: { label: 'Pago', color: 'bg-green-100 text-green-800' },
+      pendente: { label: 'Pendente', color: 'bg-yellow-100 text-yellow-800' },
+      vencido: { label: 'Vencido', color: 'bg-red-100 text-red-800' },
+      emitido: { label: 'Emitido', color: 'bg-blue-100 text-blue-800' },
+      cancelado: { label: 'Cancelado', color: 'bg-gray-100 text-gray-500' }
+    }
+    const cfg = c[status] || { label: status, color: 'bg-gray-100 text-gray-800' }
+    return <Badge className={cfg.color}>{cfg.label}</Badge>
+  }
+
+  const calcularDiasVencimento = (dataVenc: string) => {
+    return Math.ceil((new Date(dataVenc).getTime() - Date.now()) / 86400000)
+  }
+
+  const faturasFiltradas = faturas.filter(f => {
+    const matchSearch = !searchTerm ||
+      (f.numero || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (f.cliente_nome || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (f.locacao_numero || '').toLowerCase().includes(searchTerm.toLowerCase())
+    const matchStatus = filtroStatus === 'todos' || f.status === filtroStatus
+    return matchSearch && matchStatus
+  })
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando faturamento...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">💰 Faturamento</h1>
-          <p className="text-gray-600">Controle financeiro e relatórios</p>
+          <h1 className="text-3xl font-bold text-gray-900">Faturamento</h1>
+          <p className="text-gray-600">Controle financeiro e faturas</p>
         </div>
-        <Button 
-          onClick={() => setShowForm(!showForm)}
-          className="bg-blue-600 hover:bg-blue-700"
-        >
-          ➕ Nova Fatura
-        </Button>
+        <Button onClick={() => setShowForm(!showForm)}>+ Nova Fatura</Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
-          <Card key={stat.name} className="border-l-4 border-blue-500">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">{stat.name}</p>
-                  <p className={`text-xl font-bold ${stat.color}`}>{stat.value}</p>
-                </div>
-                <div className="text-2xl">{stat.icon}</div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-blue-600">📊 Receita por Mês</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {mesesReceita.map((mes, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div>
-                    <div className="font-medium">{mes.mes}</div>
-                    <div className="text-sm text-gray-600">{mes.faturas} faturas • {mes.taxa}% pago</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-lg font-bold text-green-600">
-                      R$ {mes.receita.toLocaleString()}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-green-600">🎯 Metas e Performance</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span>Meta Mensal:</span>
-                <span className="font-bold">R$ 50.000</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Atual (Novembro):</span>
-                <span className="font-bold text-green-600">R$ 40.025</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-3">
-                <div className="bg-green-500 h-3 rounded-full" style={{width: '80%'}}></div>
-              </div>
-              <div className="text-center text-sm text-gray-600">80% da meta atingida</div>
-              
-              <div className="mt-6 pt-4 border-t">
-                <h4 className="font-medium mb-3">Indicadores:</h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>Ticket Médio:</span>
-                    <span className="font-medium">R$ 10.007</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Taxa Conversão:</span>
-                    <span className="font-medium text-green-600">89%</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Prazo Médio Pagto:</span>
-                    <span className="font-medium">12 dias</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card><CardContent className="p-4"><div className="text-sm text-gray-600">Receita Confirmada</div><div className="text-2xl font-bold text-green-600">{formatarMoeda(stats.pago)}</div></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="text-sm text-gray-600">A Receber</div><div className="text-2xl font-bold text-yellow-600">{formatarMoeda(stats.pendente)}</div></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="text-sm text-gray-600">Vencidas</div><div className="text-2xl font-bold text-red-600">{formatarMoeda(stats.vencido)}</div></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="text-sm text-gray-600">Total Faturas</div><div className="text-2xl font-bold text-blue-600">{stats.total}</div></CardContent></Card>
       </div>
 
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Controle de Faturas</CardTitle>
-            <div className="flex space-x-2">
-              <select 
-                value={filtroStatus}
-                onChange={(e) => setFiltroStatus(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-              >
-                <option value="todos">Todos Status</option>
-                <option value="emitido">Emitidas</option>
-                <option value="pendente">Pendentes</option>
-                <option value="pago">Pagas</option>
-                <option value="vencido">Vencidas</option>
-              </select>
-              <select 
-                value={filtroMes}
-                onChange={(e) => setFiltroMes(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-              >
-                <option value="todos">Todos os Meses</option>
-                <option value="10">Novembro</option>
-                <option value="9">Outubro</option>
-                <option value="8">Setembro</option>
-              </select>
-            </div>
+            <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm">
+              <option value="todos">Todos Status</option>
+              <option value="emitido">Emitidas</option>
+              <option value="pendente">Pendentes</option>
+              <option value="pago">Pagas</option>
+              <option value="vencido">Vencidas</option>
+            </select>
           </div>
-          <div className="flex items-center space-x-2">
-            <Input
-              placeholder="🔍 Buscar por número, cliente ou locação..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-md"
-            />
-          </div>
+          <Input placeholder="Buscar por número, cliente ou locação..." value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)} className="max-w-md mt-2" />
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {faturasFiltradas.map((fatura) => (
-              <div key={fatura.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-2">
-                      <h3 className="font-semibold text-lg text-gray-900">{fatura.numero}</h3>
-                      {getStatusBadge(fatura.status)}
-                      {fatura.status === 'pendente' && (
-                        <span className="text-xs bg-yellow-50 text-yellow-700 px-2 py-1 rounded">
-                          {calcularDiasVencimento(fatura.dataVencimento)} dias para vencer
-                        </span>
-                      )}
-                      {fatura.status === 'vencido' && (
-                        <span className="text-xs bg-red-50 text-red-700 px-2 py-1 rounded">
-                          Vencida há {Math.abs(calcularDiasVencimento(fatura.dataVencimento))} dias
-                        </span>
-                      )}
+          {faturasFiltradas.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">Nenhuma fatura encontrada</div>
+          ) : (
+            <div className="space-y-4">
+              {faturasFiltradas.map(fatura => (
+                <div key={fatura.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-3 mb-2">
+                        <h3 className="font-semibold text-lg text-gray-900">{fatura.numero || `#${fatura.id}`}</h3>
+                        {getStatusBadge(fatura.status)}
+                        {fatura.status === 'pendente' && fatura.data_vencimento && (
+                          <span className="text-xs bg-yellow-50 text-yellow-700 px-2 py-1 rounded">
+                            {calcularDiasVencimento(fatura.data_vencimento)} dias para vencer
+                          </span>
+                        )}
+                        {fatura.status === 'vencido' && fatura.data_vencimento && (
+                          <span className="text-xs bg-red-50 text-red-700 px-2 py-1 rounded">
+                            Vencida há {Math.abs(calcularDiasVencimento(fatura.data_vencimento))} dias
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        <span className="font-medium">Cliente:</span> {fatura.cliente_nome} -
+                        <span className="font-medium"> Locação:</span> {fatura.locacao_numero || '-'}
+                      </div>
                     </div>
-                    <div className="text-sm text-gray-600">
-                      <span className="font-medium">Cliente:</span> {fatura.cliente} • 
-                      <span className="font-medium"> Locação:</span> {fatura.locacao}
-                    </div>
+                    <div className="text-2xl font-bold text-green-600">{formatarMoeda(Number(fatura.valor) || 0)}</div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold text-green-600">
-                      R$ {fatura.valor.toLocaleString()}
-                    </div>
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600 mb-4">
-                  <div>
-                    <span className="font-medium">📅 Emissão:</span>
-                    <div>{new Date(fatura.dataEmissao).toLocaleDateString()}</div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600 mb-4">
+                    <div><span className="font-medium">Emissão:</span><div>{fatura.data_emissao ? new Date(fatura.data_emissao).toLocaleDateString('pt-BR') : '-'}</div></div>
+                    <div><span className="font-medium">Vencimento:</span><div>{fatura.data_vencimento ? new Date(fatura.data_vencimento).toLocaleDateString('pt-BR') : '-'}</div></div>
+                    <div><span className="font-medium">Pagamento:</span><div>{fatura.forma_pagamento || 'Não informado'}</div>
+                      {fatura.data_pagamento && <div className="text-xs text-green-600">{new Date(fatura.data_pagamento).toLocaleDateString('pt-BR')}</div>}
+                    </div>
+                    {fatura.observacoes && <div><span className="font-medium">Obs:</span><div className="text-xs">{fatura.observacoes}</div></div>}
                   </div>
-                  <div>
-                    <span className="font-medium">⏰ Vencimento:</span>
-                    <div>{new Date(fatura.dataVencimento).toLocaleDateString()}</div>
-                  </div>
-                  <div>
-                    <span className="font-medium">💳 Pagamento:</span>
-                    <div>{fatura.formaPagamento || 'Não informado'}</div>
-                    {fatura.dataPagamento && (
-                      <div className="text-xs text-green-600">{new Date(fatura.dataPagamento).toLocaleDateString()}</div>
+
+                  <div className="flex space-x-2">
+                    {(fatura.status === 'pendente' || fatura.status === 'emitido') && (
+                      <Button variant="outline" size="sm" onClick={() => marcarPago(fatura)} className="text-green-600 border-green-300">Marcar Pago</Button>
+                    )}
+                    {fatura.status === 'vencido' && (
+                      <Button variant="outline" size="sm" onClick={() => cobrar(fatura)} className="text-red-600 border-red-300">Cobrar</Button>
                     )}
                   </div>
-                  <div>
-                    <span className="font-medium">📝 Observações:</span>
-                    <div className="text-xs">{fatura.observacoes}</div>
-                  </div>
                 </div>
-
-                <div className="flex space-x-2">
-                  <Button variant="outline" size="sm">📄 PDF</Button>
-                  <Button variant="outline" size="sm">✏️ Editar</Button>
-                  <Button variant="outline" size="sm">📧 Enviar</Button>
-                  {fatura.status === 'pendente' && (
-                    <Button variant="outline" size="sm" className="text-green-600 border-green-300">✅ Marcar Pago</Button>
-                  )}
-                  {fatura.status === 'vencido' && (
-                    <Button variant="outline" size="sm" className="text-red-600 border-red-300">📞 Cobrar</Button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {faturasFiltradas.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              <div className="text-4xl mb-4">🔍</div>
-              <p>Nenhuma fatura encontrada com os filtros aplicados</p>
+              ))}
             </div>
           )}
         </CardContent>
@@ -356,33 +221,31 @@ export default function FaturamentoPage() {
 
       {showForm && (
         <Card>
-          <CardHeader>
-            <CardTitle>➕ Nova Fatura</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle>Nova Fatura</CardTitle></CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <select className="px-3 py-2 border border-gray-300 rounded-md">
+              <select value={formData.locacao_id} onChange={(e) => setFormData({ ...formData, locacao_id: e.target.value })}
+                className="px-3 py-2 border border-gray-300 rounded-md">
                 <option value="">Selecionar Locação</option>
-                <option value="loc1">LOC-2024-005 - Construtora Alpha</option>
-                <option value="loc2">LOC-2024-006 - Beta Engenharia</option>
-                <option value="loc3">LOC-2024-007 - Construtora Gama</option>
+                {locacoes.map(l => <option key={l.id} value={l.id}>{l.numero} - {l.cliente_nome}</option>)}
               </select>
-              <Input placeholder="Valor Total (R$)" type="number" />
-              <Input placeholder="Data Vencimento" type="date" />
-              <select className="px-3 py-2 border border-gray-300 rounded-md">
+              <Input placeholder="Valor Total (R$)" type="number" value={formData.valor} onChange={(e) => setFormData({ ...formData, valor: e.target.value })} />
+              <Input placeholder="Data Vencimento" type="date" value={formData.data_vencimento} onChange={(e) => setFormData({ ...formData, data_vencimento: e.target.value })} />
+              <select value={formData.forma_pagamento} onChange={(e) => setFormData({ ...formData, forma_pagamento: e.target.value })}
+                className="px-3 py-2 border border-gray-300 rounded-md">
                 <option value="">Forma de Pagamento</option>
-                <option value="pix">PIX</option>
-                <option value="boleto">Boleto</option>
-                <option value="transferencia">Transferência</option>
-                <option value="dinheiro">Dinheiro</option>
+                <option value="PIX">PIX</option>
+                <option value="Boleto">Boleto</option>
+                <option value="Transferência">Transferência</option>
+                <option value="Dinheiro">Dinheiro</option>
               </select>
             </div>
             <div className="mt-4">
-              <Input placeholder="Observações da fatura..." />
+              <Input placeholder="Observações da fatura..." value={formData.observacoes} onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })} />
             </div>
             <div className="mt-6 flex space-x-3">
-              <Button className="bg-blue-600 hover:bg-blue-700">💾 Gerar Fatura</Button>
-              <Button variant="outline" onClick={() => setShowForm(false)}>❌ Cancelar</Button>
+              <Button onClick={criarFatura}>Gerar Fatura</Button>
+              <Button variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
             </div>
           </CardContent>
         </Card>

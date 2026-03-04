@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ReactNode, useState } from "react"
+import { ReactNode } from "react"
 
 interface DashboardLayoutProps {
   children: ReactNode
@@ -64,7 +64,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                     {item.name}
                     {item.badge && (
                       <span className={`ml-auto px-2 py-1 text-xs font-bold rounded-full ${
-                        item.badge === 'NEW' 
+                        item.badge === 'NEW'
                           ? 'bg-green-100 text-green-800'
                           : 'bg-red-100 text-red-800'
                       }`}>

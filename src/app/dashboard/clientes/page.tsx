@@ -1,362 +1,341 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
-
-interface Cliente {
-  id: number
-  nome: string
-  contato: string
-  telefone: string
-  email: string
-  cnpj?: string
-  cidade: string
-  status: 'ativo' | 'inativo'
-  locacoes: number
-  totalGasto: number
-}
-
-const clientesIniciais: Cliente[] = [
-  {
-    id: 1,
-    nome: 'Construtora Alpha Ltda',
-    contato: 'João Silva',
-    telefone: '(85) 99999-1111',
-    email: 'joao@alpha.com.br',
-    cnpj: '12.345.678/0001-90',
-    cidade: 'Fortaleza',
-    status: 'ativo',
-    locacoes: 3,
-    totalGasto: 15420.00
-  },
-  {
-    id: 2,
-    nome: 'Beta Engenharia',
-    contato: 'Maria Santos',
-    telefone: '(85) 99999-2222',
-    email: 'maria@beta.com.br',
-    cnpj: '98.765.432/0001-10',
-    cidade: 'Caucaia',
-    status: 'ativo',
-    locacoes: 1,
-    totalGasto: 8500.00
-  }
-]
+import { supabase } from '@/lib/supabase'
 
 export default function ClientesPage() {
-  const [clientes, setClientes] = useState<Cliente[]>(clientesIniciais)
+  const router = useRouter()
+  const [clientes, setClientes] = useState([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [showModal, setShowModal] = useState(false)
-  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create')
-  const [filtroStatus, setFiltroStatus] = useState('todos')
-  const [clienteEditando, setClienteEditando] = useState<Cliente | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(0)
+  const [totalCount, setTotalCount] = useState(0)
+  const [filtroEstado, setFiltroEstado] = useState('todos')
+  const [estadosDisponiveis, setEstadosDisponiveis] = useState([])
 
-  // Formulário simplificado
-  const [nome, setNome] = useState('')
-  const [contato, setContato] = useState('')
-  const [telefone, setTelefone] = useState('')
-  const [email, setEmail] = useState('')
-  const [cidade, setCidade] = useState('')
+  const ITEMS_PER_PAGE = 15
 
-  console.log('🔍 Estado atual:', { clientes, showModal, modalMode })
+  useEffect(() => {
+    carregarClientes()
+    carregarEstados()
+  }, [currentPage, searchTerm, filtroEstado])
 
-  const clientesFiltrados = clientes.filter(cliente => {
-    const matchSearch = cliente.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       cliente.contato.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       cliente.cidade.toLowerCase().includes(searchTerm.toLowerCase())
-    
-    const matchStatus = filtroStatus === 'todos' || cliente.status === filtroStatus
-    
-    return matchSearch && matchStatus
-  })
+  const carregarEstados = async () => {
+    try {
+      const { data } = await supabase
+        .from('clientes')
+        .select('estado')
+        .not('estado', 'is', null)
+        .neq('estado', '')
 
-  const stats = [
-    { name: 'Total Clientes', value: clientes.length, icon: '👥', color: 'text-blue-600' },
-    { name: 'Clientes Ativos', value: clientes.filter(c => c.status === 'ativo').length, icon: '✅', color: 'text-green-600' },
-    { name: 'Locações Ativas', value: clientes.reduce((sum, c) => sum + c.locacoes, 0), icon: '📄', color: 'text-yellow-600' },
-    { name: 'Receita Total', value: `R$ ${clientes.reduce((sum, c) => sum + c.totalGasto, 0).toLocaleString()}`, icon: '💰', color: 'text-emerald-600' }
-  ]
+      const estadosUnicos = [...new Set(data?.map(item => item.estado) || [])]
+        .filter(estado => estado && estado.trim())
+        .sort()
 
-  const abrirModalCriar = () => {
-    console.log('📝 Abrindo modal para criar')
-    setModalMode('create')
-    setClienteEditando(null)
-    setNome('')
-    setContato('')
-    setTelefone('')
-    setEmail('')
-    setCidade('')
-    setShowModal(true)
-  }
-
-  const abrirModalEditar = (cliente: Cliente) => {
-    console.log('✏️ Abrindo modal para editar:', cliente.nome)
-    setModalMode('edit')
-    setClienteEditando(cliente)
-    setNome(cliente.nome)
-    setContato(cliente.contato)
-    setTelefone(cliente.telefone)
-    setEmail(cliente.email)
-    setCidade(cliente.cidade)
-    setShowModal(true)
-  }
-
-  const fecharModal = () => {
-    console.log('❌ Fechando modal')
-    setShowModal(false)
-    setClienteEditando(null)
-    setNome('')
-    setContato('')
-    setTelefone('')
-    setEmail('')
-    setCidade('')
-  }
-
-  const salvarCliente = () => {
-    console.log('💾 Tentando salvar cliente:', { nome, contato, telefone, email, cidade })
-
-    // Validação simples
-    if (!nome || !contato || !telefone || !email || !cidade) {
-      alert('Preencha todos os campos!')
-      return
+      setEstadosDisponiveis(estadosUnicos)
+    } catch (error) {
+      console.error('Erro ao carregar estados:', error)
     }
+  }
 
-    if (modalMode === 'create') {
-      const novoCliente: Cliente = {
-        id: Math.max(...clientes.map(c => c.id)) + 1,
-        nome,
-        contato,
-        telefone,
-        email,
-        cidade,
-        status: 'ativo',
-        locacoes: 0,
-        totalGasto: 0
+  const carregarClientes = async () => {
+    try {
+      setLoading(true)
+
+      let query = supabase
+        .from('clientes')
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+
+      // Aplicar filtros
+      if (searchTerm) {
+        query = query.or(`nome.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,telefone.ilike.%${searchTerm}%,cidade.ilike.%${searchTerm}%`)
       }
-      
-      console.log('➕ Criando novo cliente:', novoCliente)
-      setClientes([...clientes, novoCliente])
-      alert('Cliente criado com sucesso!')
-    } else if (clienteEditando) {
-      const clienteAtualizado = {
-        ...clienteEditando,
-        nome,
-        contato,
-        telefone,
-        email,
-        cidade
+
+      if (filtroEstado !== 'todos') {
+        query = query.eq('estado', filtroEstado)
       }
-      
-      console.log('✏️ Editando cliente:', clienteAtualizado)
-      setClientes(clientes.map(c => 
-        c.id === clienteEditando.id ? clienteAtualizado : c
-      ))
-      alert('Cliente atualizado com sucesso!')
+
+      // Aplicar paginação
+      const from = (currentPage - 1) * ITEMS_PER_PAGE
+      const to = from + ITEMS_PER_PAGE - 1
+
+      const { data, error, count } = await query.range(from, to)
+
+      if (error) throw error
+
+      setClientes(data || [])
+      setTotalCount(count || 0)
+      setTotalPages(Math.ceil((count || 0) / ITEMS_PER_PAGE))
+
+    } catch (error) {
+      console.error('Erro ao carregar clientes:', error)
+    } finally {
+      setLoading(false)
     }
-
-    fecharModal()
   }
 
-  const testarBotao = (acao: string) => {
-    console.log(`🔘 Botão ${acao} clicado!`)
-    alert(`Botão ${acao} funcionou!`)
+  const formatarNumero = (numero) => {
+    return new Intl.NumberFormat('pt-BR').format(numero)
   }
 
-  const abrirWhatsApp = (cliente: Cliente) => {
-    console.log('📞 Abrindo WhatsApp para:', cliente.nome)
-    const telefone = cliente.telefone.replace(/\D/g, '')
-    const mensagem = `Olá ${cliente.contato}, tudo bem? Aqui é da LocaSys Pro!`
-    window.open(`https://wa.me/55${telefone}?text=${encodeURIComponent(mensagem)}`, '_blank')
+  const handleSearchChange = useCallback((e) => {
+    setSearchTerm(e.target.value)
+    setCurrentPage(1)
+  }, [])
+
+  const handleEstadoChange = useCallback((e) => {
+    setFiltroEstado(e.target.value)
+    setCurrentPage(1)
+  }, [])
+
+  const navigateToPage = (page) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page)
+    }
+  }
+
+  const clearFilters = () => {
+    setSearchTerm('')
+    setFiltroEstado('todos')
+    setCurrentPage(1)
+  }
+
+  const formatarTelefone = (telefone) => {
+    if (!telefone) return ''
+    // Remove caracteres não numéricos
+    const nums = telefone.replace(/\D/g, '')
+    // Formata conforme o padrão brasileiro
+    if (nums.length === 11) {
+      return `(${nums.substring(0,2)}) ${nums.substring(2,3)} ${nums.substring(3,7)}-${nums.substring(7)}`
+    } else if (nums.length === 10) {
+      return `(${nums.substring(0,2)}) ${nums.substring(2,6)}-${nums.substring(6)}`
+    }
+    return telefone
+  }
+
+  if (loading && currentPage === 1) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando clientes...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">👥 Clientes</h1>
-          <p className="text-gray-600">Gerencie clientes e relacionamentos</p>
+          <h1 className="text-3xl font-bold text-gray-900">Clientes</h1>
+          <p className="text-gray-600 mt-2">
+            {formatarNumero(totalCount)} clientes cadastrados
+          </p>
         </div>
-        <button 
-          onClick={abrirModalCriar}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
-        >
-          ➕ Novo Cliente
-        </button>
+        <Button onClick={() => router.push('/dashboard/clientes/novo')}>
+          + Novo Cliente
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
-          <Card key={stat.name} className="border-l-4 border-blue-500">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">{stat.name}</p>
-                  <p className={`text-xl font-bold ${stat.color}`}>{stat.value}</p>
-                </div>
-                <div className="text-2xl">{stat.icon}</div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
+      {/* Filtros */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Lista de Clientes ({clientes.length})</CardTitle>
-            <div className="flex space-x-2">
-              <select 
-                value={filtroStatus}
-                onChange={(e) => setFiltroStatus(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-              >
-                <option value="todos">Todos</option>
-                <option value="ativo">Ativos</option>
-                <option value="inativo">Inativos</option>
-              </select>
-            </div>
-          </div>
-          <Input
-            placeholder="🔍 Buscar por nome, contato ou cidade..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="max-w-md"
-          />
+          <CardTitle>Filtros e Busca</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {clientesFiltrados.map((cliente) => (
-              <div key={cliente.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3">
-                      <h3 className="font-semibold text-lg">{cliente.nome}</h3>
-                      <Badge variant={cliente.status === 'ativo' ? 'primary' : 'secondary'}>
-                        {cliente.status === 'ativo' ? 'Ativo' : 'Inativo'}
-                      </Badge>
-                    </div>
-                    <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600">
-                      <div>
-                        <span className="font-medium">Contato:</span> {cliente.contato}
-                      </div>
-                      <div>
-                        <span className="font-medium">Telefone:</span> {cliente.telefone}
-                      </div>
-                      <div>
-                        <span className="font-medium">Email:</span> {cliente.email}
-                      </div>
-                      <div>
-                        <span className="font-medium">Cidade:</span> {cliente.cidade}
-                      </div>
-                    </div>
-                    <div className="mt-3 flex items-center space-x-6 text-sm">
-                      <span className="text-blue-600">📄 {cliente.locacoes} locações</span>
-                      <span className="text-green-600">💰 R$ {cliente.totalGasto.toLocaleString()}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex space-x-2">
-                    <button 
-                      onClick={() => abrirModalEditar(cliente)}
-                      className="bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded text-sm"
-                    >
-                      ✏️ Editar
-                    </button>
-                    <button 
-                      onClick={() => testarBotao('Orçamento')}
-                      className="bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded text-sm"
-                    >
-                      📋 Orçamento
-                    </button>
-                    <button 
-                      onClick={() => abrirWhatsApp(cliente)}
-                      className="bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded text-sm"
-                    >
-                      📞 WhatsApp
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <Input
+                placeholder="Buscar clientes..."
+                value={searchTerm}
+                onChange={handleSearchChange}
+                className="w-full"
+              />
+            </div>
+            <div>
+              <select
+                value={filtroEstado}
+                onChange={handleEstadoChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="todos">Todos os estados</option>
+                {estadosDisponiveis.map(estado => (
+                  <option key={estado} value={estado}>{estado}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Button variant="outline" onClick={clearFilters} className="w-full">
+                Limpar Filtros
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Modal Simplificado */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full m-4">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold">
-                  {modalMode === 'create' ? '➕ Novo Cliente' : '✏️ Editar Cliente'}
-                </h2>
-                <button 
-                  onClick={fecharModal}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  ❌
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <input
-                  type="text"
-                  placeholder="Nome da Empresa *"
-                  value={nome}
-                  onChange={(e) => setNome(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-                <input
-                  type="text"
-                  placeholder="Nome do Contato *"
-                  value={contato}
-                  onChange={(e) => setContato(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-                <input
-                  type="text"
-                  placeholder="Telefone *"
-                  value={telefone}
-                  onChange={(e) => setTelefone(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-                <input
-                  type="email"
-                  placeholder="Email *"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-                <input
-                  type="text"
-                  placeholder="Cidade *"
-                  value={cidade}
-                  onChange={(e) => setCidade(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                />
-              </div>
-
-              <div className="mt-6 flex space-x-3">
-                <button 
-                  onClick={salvarCliente}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
-                >
-                  💾 {modalMode === 'create' ? 'Criar' : 'Salvar'}
-                </button>
-                <button 
-                  onClick={fecharModal}
-                  className="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded"
-                >
-                  ❌ Cancelar
-                </button>
-              </div>
+      {/* Lista de Clientes */}
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <CardTitle>
+              Clientes ({formatarNumero(totalCount)} total)
+            </CardTitle>
+            <div className="text-sm text-gray-600">
+              Página {currentPage} de {totalPages}
             </div>
           </div>
-        </div>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent mx-auto mb-2"></div>
+              <p className="text-gray-600">Carregando...</p>
+            </div>
+          ) : clientes.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-gray-500 mb-4">
+                {searchTerm || filtroEstado !== 'todos'
+                  ? 'Nenhum cliente encontrado com os filtros aplicados' 
+                  : 'Nenhum cliente cadastrado'}
+              </p>
+              <Button onClick={() => router.push('/dashboard/clientes/novo')}>
+                + Cadastrar Primeiro Cliente
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {clientes.map((cliente) => (
+                <div key={cliente.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                        <span className="text-blue-600 font-semibold text-lg">
+                          {cliente.nome?.charAt(0)?.toUpperCase()}
+                        </span>
+                      </div>
+                      
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-gray-900 text-lg">{cliente.nome}</h3>
+                        <div className="text-sm text-gray-600 space-y-1 mt-1">
+                          {cliente.email && (
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">Email:</span>
+                              <span>{cliente.email}</span>
+                            </div>
+                          )}
+                          {cliente.telefone && (
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">Telefone:</span>
+                              <span>{formatarTelefone(cliente.telefone)}</span>
+                            </div>
+                          )}
+                          {(cliente.cidade || cliente.estado) && (
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">Localização:</span>
+                              <span>
+                                {[cliente.cidade, cliente.estado].filter(Boolean).join(', ')}
+                              </span>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">Cadastrado:</span>
+                            <span>{new Date(cliente.created_at).toLocaleDateString('pt-BR')}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex flex-col items-end space-y-2">
+                      <Badge variant="outline" className="text-green-600 border-green-300">
+                        Ativo
+                      </Badge>
+                      
+                      <div className="flex items-center space-x-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => router.push(`/dashboard/clientes/${cliente.id}/editar`)}
+                        >
+                          Editar
+                        </Button>
+                        
+                        <Button 
+                          size="sm"
+                          onClick={() => router.push(`/dashboard/orcamentos/novo?cliente=${cliente.id}`)}
+                        >
+                          + Orçamento
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Paginação */}
+      {totalPages > 1 && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex justify-between items-center">
+              <div className="text-sm text-gray-600">
+                Mostrando {(currentPage - 1) * ITEMS_PER_PAGE + 1} até {Math.min(currentPage * ITEMS_PER_PAGE, totalCount)} de {formatarNumero(totalCount)} clientes
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => navigateToPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                >
+                  Anterior
+                </Button>
+                
+                <div className="flex space-x-1">
+                  {[...Array(Math.min(5, totalPages))].map((_, index) => {
+                    const pageNumber = currentPage <= 3 
+                      ? index + 1 
+                      : currentPage + index - 2
+                    
+                    if (pageNumber > totalPages) return null
+                    
+                    return (
+                      <Button
+                        key={pageNumber}
+                        variant={pageNumber === currentPage ? "primary" : "outline"}
+                        size="sm"
+                        onClick={() => navigateToPage(pageNumber)}
+                        className="w-8 h-8 p-0"
+                      >
+                        {pageNumber}
+                      </Button>
+                    )
+                  })}
+                </div>
+                
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => navigateToPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                >
+                  Próxima
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   )

@@ -22,8 +22,8 @@ export default function LandingPageBRA() {
               <button className="text-white hover:text-orange-200 px-4 py-2 rounded-lg transition-colors">
                 📞 (85) 98900-2319
               </button>
-              <Link 
-                href="/dashboard" 
+              <Link
+                href="/dashboard"
                 className="bg-white text-orange-600 px-6 py-3 rounded-lg font-medium hover:bg-orange-50 transition-colors"
               >
                 Acessar Sistema
@@ -41,17 +41,17 @@ export default function LandingPageBRA() {
             <span className="block text-yellow-300">de Equipamentos</span>
           </h1>
           <p className="text-xl text-orange-100 mb-8 max-w-3xl mx-auto">
-            Locação profissional de equipamentos para construção civil. 
+            Locação profissional de equipamentos para construção civil.
             Qualidade, confiança e suporte técnico especializado em Fortaleza e região.
           </p>
           <div className="space-x-4">
-            <Link 
-              href="/dashboard" 
+            <Link
+              href="/dashboard"
               className="bg-yellow-400 text-orange-900 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-yellow-300 transition-colors inline-flex items-center"
             >
               🚀 Acessar Sistema
             </Link>
-            <a 
+            <a
               href="tel:+5585989002319"
               className="border-2 border-white text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-white hover:text-orange-900 transition-colors inline-flex items-center"
             >
@@ -150,7 +150,7 @@ export default function LandingPageBRA() {
               Entre em contato e faça seu orçamento sem compromisso
             </p>
             <div className="space-x-4">
-              <a 
+              <a
                 href="https://wa.me/5585989002319"
                 target="_blank"
                 rel="noopener noreferrer"
@@ -158,8 +158,8 @@ export default function LandingPageBRA() {
               >
                 💬 WhatsApp
               </a>
-              <Link 
-                href="/dashboard" 
+              <Link
+                href="/dashboard"
                 className="bg-yellow-400 text-orange-900 px-8 py-3 rounded-lg text-lg font-semibold hover:bg-yellow-300 transition-colors inline-flex items-center"
               >
                 📋 Sistema de Orçamentos

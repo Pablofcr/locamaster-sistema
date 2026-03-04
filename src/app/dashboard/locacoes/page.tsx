@@ -1,257 +1,242 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
-
-const locacoesMock = [
-  {
-    id: 1,
-    numero: 'LOC-2024-001',
-    cliente: 'Construtora Alpha Ltda',
-    equipamento: 'Escavadeira Caterpillar 320D',
-    dataInicio: '2024-11-01',
-    dataFim: '2024-12-15',
-    diasTotal: 44,
-    valorDia: 850.00,
-    valorTotal: 37400.00,
-    status: 'ativo',
-    localEntrega: 'Obra Centro - Fortaleza',
-    observacoes: 'Obra de fundação, uso intensivo'
-  },
-  {
-    id: 2,
-    numero: 'LOC-2024-002',
-    cliente: 'Beta Engenharia',
-    equipamento: 'Betoneira B350',
-    dataInicio: '2024-11-10',
-    dataFim: '2024-11-25',
-    diasTotal: 15,
-    valorDia: 45.00,
-    valorTotal: 675.00,
-    status: 'finalizado',
-    localEntrega: 'Residencial Caucaia',
-    observacoes: 'Concretagem lajes'
-  },
-  {
-    id: 3,
-    numero: 'LOC-2024-003',
-    cliente: 'Construtora Gama',
-    equipamento: 'Gerador Diesel 50KVA',
-    dataInicio: '2024-11-20',
-    dataFim: '2024-12-05',
-    diasTotal: 15,
-    valorDia: 120.00,
-    valorTotal: 1800.00,
-    status: 'pendente',
-    localEntrega: 'Obra Maracanaú',
-    observacoes: 'Aguardando liberação da obra'
-  },
-  {
-    id: 4,
-    numero: 'LOC-2024-004',
-    cliente: 'Alpha Construções',
-    equipamento: 'Vibrador de Concreto CV-2200',
-    dataInicio: '2024-11-18',
-    dataFim: '2024-11-24',
-    diasTotal: 6,
-    valorDia: 25.00,
-    valorTotal: 150.00,
-    status: 'vencido',
-    localEntrega: 'Residencial Messejana',
-    observacoes: 'Contrato vencido - aguardando devolução'
-  }
-]
+import { useToast } from '@/components/ui/Toast'
+import { supabase } from '@/lib/supabase'
 
 export default function LocacoesPage() {
+  const { showToast } = useToast()
+  const [locacoes, setLocacoes] = useState<any[]>([])
+  const [clientes, setClientes] = useState<any[]>([])
+  const [equipamentos, setEquipamentos] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [showForm, setShowForm] = useState(false)
   const [filtroStatus, setFiltroStatus] = useState('todos')
+  const [showForm, setShowForm] = useState(false)
+  const [stats, setStats] = useState({ total: 0, ativos: 0, pendentes: 0, valorTotal: 0 })
 
-  const locacoesFiltradas = locacoesMock.filter(locacao => {
-    const matchSearch = locacao.numero.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       locacao.cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       locacao.equipamento.toLowerCase().includes(searchTerm.toLowerCase())
-    
-    const matchStatus = filtroStatus === 'todos' || locacao.status === filtroStatus
-    
-    return matchSearch && matchStatus
+  const [formData, setFormData] = useState({
+    cliente_id: '', equipamento_id: '', data_inicio: '', data_fim: '',
+    local_entrega: '', valor_dia: '', observacoes: ''
   })
 
-  const stats = [
-    { 
-      name: 'Total Contratos', 
-      value: locacoesMock.length, 
-      icon: '📄', 
-      color: 'text-blue-600' 
-    },
-    { 
-      name: 'Ativos', 
-      value: locacoesMock.filter(l => l.status === 'ativo').length, 
-      icon: '✅', 
-      color: 'text-green-600' 
-    },
-    { 
-      name: 'Pendentes', 
-      value: locacoesMock.filter(l => l.status === 'pendente').length, 
-      icon: '⏳', 
-      color: 'text-yellow-600' 
-    },
-    { 
-      name: 'Valor Total', 
-      value: `R$ ${locacoesMock.reduce((sum, l) => sum + l.valorTotal, 0).toLocaleString()}`, 
-      icon: '💰', 
-      color: 'text-emerald-600' 
+  useEffect(() => { carregarDados() }, [])
+
+  const carregarDados = async () => {
+    setLoading(true)
+    try {
+      const [locRes, cliRes, eqRes] = await Promise.all([
+        supabase.from('locacoes').select('*').order('created_at', { ascending: false }),
+        supabase.from('clientes').select('id, nome').order('nome'),
+        supabase.from('equipamentos').select('id, nome, preco_unitario_dia, preco_dia').eq('status', 'disponivel').eq('ativo', true).order('nome')
+      ])
+
+      const data = locRes.data || []
+      setLocacoes(data)
+      setClientes(cliRes.data || [])
+      setEquipamentos(eqRes.data || [])
+
+      setStats({
+        total: data.length,
+        ativos: data.filter(l => l.status === 'ativo').length,
+        pendentes: data.filter(l => l.status === 'pendente').length,
+        valorTotal: data.reduce((s, l) => s + (Number(l.valor_total) || 0), 0)
+      })
+    } catch (error) {
+      showToast('Erro ao carregar locações', 'error')
+    } finally {
+      setLoading(false)
     }
-  ]
+  }
+
+  const criarLocacao = async () => {
+    if (!formData.cliente_id || !formData.equipamento_id || !formData.data_inicio || !formData.data_fim) {
+      showToast('Preencha todos os campos obrigatórios', 'warning')
+      return
+    }
+    try {
+      const cliente = clientes.find(c => c.id === parseInt(formData.cliente_id))
+      const equipamento = equipamentos.find(e => e.id === parseInt(formData.equipamento_id))
+      const valorDia = Number(formData.valor_dia) || Number(equipamento?.preco_unitario_dia) || Number(equipamento?.preco_dia) || 0
+      const inicio = new Date(formData.data_inicio)
+      const fim = new Date(formData.data_fim)
+      const dias = Math.ceil((fim.getTime() - inicio.getTime()) / 86400000)
+
+      const countRes = await supabase.from('locacoes').select('*', { count: 'exact', head: true })
+      const numero = `LOC-${new Date().getFullYear()}-${String((countRes.count || 0) + 1).padStart(3, '0')}`
+
+      const { error } = await supabase.from('locacoes').insert({
+        numero, cliente_id: parseInt(formData.cliente_id), cliente_nome: cliente?.nome || '',
+        equipamento_id: parseInt(formData.equipamento_id), equipamento_nome: equipamento?.nome || '',
+        data_inicio: formData.data_inicio, data_fim: formData.data_fim,
+        dias_total: dias, valor_dia: valorDia, valor_total: valorDia * dias,
+        status: 'pendente', local_entrega: formData.local_entrega, observacoes: formData.observacoes
+      })
+
+      if (error) throw error
+
+      await supabase.from('equipamentos').update({ status: 'locado' }).eq('id', parseInt(formData.equipamento_id))
+
+      showToast('Locação criada com sucesso!', 'success')
+      setShowForm(false)
+      setFormData({ cliente_id: '', equipamento_id: '', data_inicio: '', data_fim: '', local_entrega: '', valor_dia: '', observacoes: '' })
+      carregarDados()
+    } catch (error: any) {
+      showToast('Erro ao criar locação: ' + error.message, 'error')
+    }
+  }
+
+  const finalizarLocacao = async (locacao: any) => {
+    try {
+      await supabase.from('locacoes').update({ status: 'finalizado', updated_at: new Date().toISOString() }).eq('id', locacao.id)
+      if (locacao.equipamento_id) {
+        await supabase.from('equipamentos').update({ status: 'disponivel' }).eq('id', locacao.equipamento_id)
+      }
+      showToast('Locação finalizada!', 'success')
+      carregarDados()
+    } catch { showToast('Erro ao finalizar locação', 'error') }
+  }
+
+  const formatarMoeda = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v)
 
   const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'ativo':
-        return <Badge className="bg-green-100 text-green-800">✅ Ativo</Badge>
-      case 'pendente':
-        return <Badge className="bg-yellow-100 text-yellow-800">⏳ Pendente</Badge>
-      case 'finalizado':
-        return <Badge className="bg-blue-100 text-blue-800">✔️ Finalizado</Badge>
-      case 'vencido':
-        return <Badge className="bg-red-100 text-red-800">⚠️ Vencido</Badge>
-      default:
-        return <Badge variant="secondary">❓ Indefinido</Badge>
+    const c: Record<string, { label: string; color: string }> = {
+      ativo: { label: 'Ativo', color: 'bg-green-100 text-green-800' },
+      pendente: { label: 'Pendente', color: 'bg-yellow-100 text-yellow-800' },
+      finalizado: { label: 'Finalizado', color: 'bg-blue-100 text-blue-800' },
+      vencido: { label: 'Vencido', color: 'bg-red-100 text-red-800' },
+      cancelado: { label: 'Cancelado', color: 'bg-gray-100 text-gray-500' }
     }
+    const cfg = c[status] || { label: status, color: 'bg-gray-100 text-gray-800' }
+    return <Badge className={cfg.color}>{cfg.label}</Badge>
   }
 
   const calcularDiasRestantes = (dataFim: string) => {
-    const hoje = new Date()
-    const fim = new Date(dataFim)
-    const diffTime = fim.getTime() - hoje.getTime()
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-    return diffDays
+    const diff = new Date(dataFim).getTime() - Date.now()
+    return Math.ceil(diff / 86400000)
+  }
+
+  const locacoesFiltradas = locacoes.filter(l => {
+    const matchSearch = !searchTerm ||
+      (l.numero || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (l.cliente_nome || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (l.equipamento_nome || '').toLowerCase().includes(searchTerm.toLowerCase())
+    const matchStatus = filtroStatus === 'todos' || l.status === filtroStatus
+    return matchSearch && matchStatus
+  })
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando locações...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">📄 Locações</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Locações</h1>
           <p className="text-gray-600">Contratos e acompanhamento de locações</p>
         </div>
-        <Button 
-          onClick={() => setShowForm(!showForm)}
-          className="bg-blue-600 hover:bg-blue-700"
-        >
-          ➕ Nova Locação
-        </Button>
+        <Button onClick={() => setShowForm(!showForm)}>+ Nova Locação</Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
-          <Card key={stat.name} className="border-l-4 border-blue-500">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">{stat.name}</p>
-                  <p className={`text-xl font-bold ${stat.color}`}>{stat.value}</p>
-                </div>
-                <div className="text-2xl">{stat.icon}</div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card><CardContent className="p-4"><div className="text-sm text-gray-600">Total</div><div className="text-2xl font-bold text-blue-600">{stats.total}</div></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="text-sm text-gray-600">Ativos</div><div className="text-2xl font-bold text-green-600">{stats.ativos}</div></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="text-sm text-gray-600">Pendentes</div><div className="text-2xl font-bold text-yellow-600">{stats.pendentes}</div></CardContent></Card>
+        <Card><CardContent className="p-4"><div className="text-sm text-gray-600">Valor Total</div><div className="text-2xl font-bold text-emerald-600">{formatarMoeda(stats.valorTotal)}</div></CardContent></Card>
       </div>
 
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Contratos de Locação</CardTitle>
-            <div className="flex space-x-2">
-              <select 
-                value={filtroStatus}
-                onChange={(e) => setFiltroStatus(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-              >
-                <option value="todos">Todos Status</option>
-                <option value="ativo">Ativos</option>
-                <option value="pendente">Pendentes</option>
-                <option value="finalizado">Finalizados</option>
-                <option value="vencido">Vencidos</option>
-              </select>
-            </div>
+            <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm">
+              <option value="todos">Todos Status</option>
+              <option value="ativo">Ativos</option>
+              <option value="pendente">Pendentes</option>
+              <option value="finalizado">Finalizados</option>
+              <option value="vencido">Vencidos</option>
+            </select>
           </div>
-          <div className="flex items-center space-x-2">
-            <Input
-              placeholder="🔍 Buscar por contrato, cliente ou equipamento..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="max-w-md"
-            />
-          </div>
+          <Input placeholder="Buscar por contrato, cliente ou equipamento..." value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)} className="max-w-md mt-2" />
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {locacoesFiltradas.map((locacao) => (
-              <div key={locacao.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-2">
-                      <h3 className="font-semibold text-lg text-gray-900">{locacao.numero}</h3>
-                      {getStatusBadge(locacao.status)}
-                      {locacao.status === 'ativo' && (
-                        <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded">
-                          {calcularDiasRestantes(locacao.dataFim)} dias restantes
-                        </span>
-                      )}
+          {locacoesFiltradas.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">Nenhuma locação encontrada</div>
+          ) : (
+            <div className="space-y-4">
+              {locacoesFiltradas.map(loc => (
+                <div key={loc.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-3 mb-2">
+                        <h3 className="font-semibold text-lg text-gray-900">{loc.numero || `#${loc.id}`}</h3>
+                        {getStatusBadge(loc.status)}
+                        {loc.status === 'ativo' && loc.data_fim && (
+                          <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded">
+                            {calcularDiasRestantes(loc.data_fim)} dias restantes
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        <span className="font-medium">Cliente:</span> {loc.cliente_nome} -
+                        <span className="font-medium"> Equipamento:</span> {loc.equipamento_nome}
+                      </div>
                     </div>
-                    <div className="text-sm text-gray-600">
-                      <span className="font-medium">Cliente:</span> {locacao.cliente} • 
-                      <span className="font-medium"> Equipamento:</span> {locacao.equipamento}
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600 mb-4">
+                    <div>
+                      <span className="font-medium">Período:</span>
+                      <div>{loc.data_inicio ? new Date(loc.data_inicio).toLocaleDateString('pt-BR') : '-'} - {loc.data_fim ? new Date(loc.data_fim).toLocaleDateString('pt-BR') : '-'}</div>
+                      <div className="text-xs text-gray-500">{loc.dias_total} dias</div>
                     </div>
+                    <div>
+                      <span className="font-medium">Valor:</span>
+                      <div>{formatarMoeda(Number(loc.valor_dia) || 0)}/dia</div>
+                      <div className="text-lg font-bold text-green-600">{formatarMoeda(Number(loc.valor_total) || 0)}</div>
+                    </div>
+                    <div>
+                      <span className="font-medium">Local:</span>
+                      <div>{loc.local_entrega || '-'}</div>
+                    </div>
+                    {loc.observacoes && (
+                      <div>
+                        <span className="font-medium">Observações:</span>
+                        <div className="text-xs">{loc.observacoes}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex space-x-2">
+                    {loc.status === 'ativo' && (
+                      <>
+                        <Button variant="outline" size="sm" onClick={() => finalizarLocacao(loc)}>Finalizar</Button>
+                      </>
+                    )}
+                    {loc.status === 'pendente' && (
+                      <Button variant="outline" size="sm" onClick={async () => {
+                        await supabase.from('locacoes').update({ status: 'ativo' }).eq('id', loc.id)
+                        showToast('Locação ativada!', 'success')
+                        carregarDados()
+                      }}>Ativar</Button>
+                    )}
                   </div>
                 </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600 mb-4">
-                  <div>
-                    <span className="font-medium">📅 Período:</span>
-                    <div>{new Date(locacao.dataInicio).toLocaleDateString()} - {new Date(locacao.dataFim).toLocaleDateString()}</div>
-                    <div className="text-xs text-gray-500">{locacao.diasTotal} dias</div>
-                  </div>
-                  <div>
-                    <span className="font-medium">💰 Valor:</span>
-                    <div>R$ {locacao.valorDia.toFixed(2)}/dia</div>
-                    <div className="text-lg font-bold text-green-600">R$ {locacao.valorTotal.toLocaleString()}</div>
-                  </div>
-                  <div>
-                    <span className="font-medium">📍 Local:</span>
-                    <div>{locacao.localEntrega}</div>
-                  </div>
-                  <div>
-                    <span className="font-medium">📝 Observações:</span>
-                    <div className="text-xs">{locacao.observacoes}</div>
-                  </div>
-                </div>
-
-                <div className="flex space-x-2">
-                  <Button variant="outline" size="sm">📄 Contrato</Button>
-                  <Button variant="outline" size="sm">✏️ Editar</Button>
-                  {locacao.status === 'ativo' && (
-                    <>
-                      <Button variant="outline" size="sm">🔄 Renovar</Button>
-                      <Button variant="outline" size="sm" className="text-blue-600 border-blue-300">✔️ Finalizar</Button>
-                    </>
-                  )}
-                  {locacao.status === 'vencido' && (
-                    <Button variant="outline" size="sm" className="text-red-600 border-red-300">⚠️ Cobrar</Button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {locacoesFiltradas.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              <div className="text-4xl mb-4">🔍</div>
-              <p>Nenhuma locação encontrada com os filtros aplicados</p>
+              ))}
             </div>
           )}
         </CardContent>
@@ -259,34 +244,30 @@ export default function LocacoesPage() {
 
       {showForm && (
         <Card>
-          <CardHeader>
-            <CardTitle>➕ Nova Locação</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle>Nova Locação</CardTitle></CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <select className="px-3 py-2 border border-gray-300 rounded-md">
+              <select value={formData.cliente_id} onChange={(e) => setFormData({ ...formData, cliente_id: e.target.value })}
+                className="px-3 py-2 border border-gray-300 rounded-md">
                 <option value="">Selecionar Cliente</option>
-                <option value="alpha">Construtora Alpha Ltda</option>
-                <option value="beta">Beta Engenharia</option>
-                <option value="gama">Construtora Gama</option>
+                {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
               </select>
-              <select className="px-3 py-2 border border-gray-300 rounded-md">
+              <select value={formData.equipamento_id} onChange={(e) => setFormData({ ...formData, equipamento_id: e.target.value })}
+                className="px-3 py-2 border border-gray-300 rounded-md">
                 <option value="">Selecionar Equipamento</option>
-                <option value="esc">Escavadeira Cat 320D (R$ 850/dia)</option>
-                <option value="bet">Betoneira B350 (R$ 45/dia)</option>
-                <option value="ger">Gerador 50KVA (R$ 120/dia)</option>
+                {equipamentos.map(e => <option key={e.id} value={e.id}>{e.nome} ({formatarMoeda(Number(e.preco_unitario_dia) || Number(e.preco_dia) || 0)}/dia)</option>)}
               </select>
-              <Input placeholder="Data Início" type="date" />
-              <Input placeholder="Data Fim" type="date" />
-              <Input placeholder="Local de Entrega" />
-              <Input placeholder="Valor por Dia (R$)" type="number" />
+              <Input placeholder="Data Início" type="date" value={formData.data_inicio} onChange={(e) => setFormData({ ...formData, data_inicio: e.target.value })} />
+              <Input placeholder="Data Fim" type="date" value={formData.data_fim} onChange={(e) => setFormData({ ...formData, data_fim: e.target.value })} />
+              <Input placeholder="Local de Entrega" value={formData.local_entrega} onChange={(e) => setFormData({ ...formData, local_entrega: e.target.value })} />
+              <Input placeholder="Valor por Dia (R$)" type="number" value={formData.valor_dia} onChange={(e) => setFormData({ ...formData, valor_dia: e.target.value })} />
             </div>
             <div className="mt-4">
-              <Input placeholder="Observações do contrato..." />
+              <Input placeholder="Observações do contrato..." value={formData.observacoes} onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })} />
             </div>
             <div className="mt-6 flex space-x-3">
-              <Button className="bg-blue-600 hover:bg-blue-700">💾 Criar Contrato</Button>
-              <Button variant="outline" onClick={() => setShowForm(false)}>❌ Cancelar</Button>
+              <Button onClick={criarLocacao}>Criar Contrato</Button>
+              <Button variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
             </div>
           </CardContent>
         </Card>
