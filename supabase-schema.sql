@@ -123,6 +123,24 @@ CREATE TABLE IF NOT EXISTS manutencoes (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 7. FORNECEDORES
+CREATE TABLE IF NOT EXISTS fornecedores (
+  id BIGSERIAL PRIMARY KEY,
+  nome TEXT NOT NULL,
+  cnpj TEXT,
+  email TEXT,
+  telefone TEXT,
+  contato TEXT,
+  endereco TEXT,
+  cidade TEXT,
+  estado TEXT,
+  cep TEXT,
+  categoria TEXT,
+  observacoes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- HABILITAR RLS (Row Level Security) com políticas permissivas para desenvolvimento
 ALTER TABLE clientes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE equipamentos ENABLE ROW LEVEL SECURITY;
@@ -130,6 +148,7 @@ ALTER TABLE orcamentos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE locacoes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE faturas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE manutencoes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE fornecedores ENABLE ROW LEVEL SECURITY;
 
 -- Políticas permissivas (permitir tudo para anon e authenticated)
 CREATE POLICY "Acesso total clientes" ON clientes FOR ALL USING (true) WITH CHECK (true);
@@ -138,3 +157,4 @@ CREATE POLICY "Acesso total orcamentos" ON orcamentos FOR ALL USING (true) WITH 
 CREATE POLICY "Acesso total locacoes" ON locacoes FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Acesso total faturas" ON faturas FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Acesso total manutencoes" ON manutencoes FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acesso total fornecedores" ON fornecedores FOR ALL USING (true) WITH CHECK (true);

@@ -15,6 +15,7 @@ const navigation = [
   { name: 'Equipamentos', href: '/dashboard/equipamentos', icon: '📦' },
   { name: 'Manutenção', href: '/dashboard/manutencao', icon: '🔧' },
   { name: 'Clientes', href: '/dashboard/clientes', icon: '👥' },
+  { name: 'Fornecedores', href: '/dashboard/fornecedores', icon: '🏭' },
   { name: 'Locações', href: '/dashboard/locacoes', icon: '📄' },
   { name: 'Faturamento', href: '/dashboard/faturamento', icon: '💰' },
   { name: 'Relatórios', href: '/dashboard/relatorios', icon: '📊' },
