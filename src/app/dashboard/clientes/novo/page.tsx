@@ -13,6 +13,38 @@ const estadosBrasil = [
   'PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'
 ]
 
+function maskCpfCnpj(value: string) {
+  const nums = value.replace(/\D/g, '')
+  if (nums.length <= 11) {
+    return nums
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})$/, '$1-$2')
+  }
+  return nums
+    .replace(/(\d{2})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1/$2')
+    .replace(/(\d{4})(\d{1,2})$/, '$1-$2')
+}
+
+function maskTelefone(value: string) {
+  const nums = value.replace(/\D/g, '')
+  if (nums.length <= 10) {
+    return nums
+      .replace(/(\d{2})(\d)/, '($1) $2')
+      .replace(/(\d{4})(\d{1,4})$/, '$1-$2')
+  }
+  return nums
+    .replace(/(\d{2})(\d)/, '($1) $2')
+    .replace(/(\d{5})(\d{1,4})$/, '$1-$2')
+}
+
+function maskCep(value: string) {
+  const nums = value.replace(/\D/g, '')
+  return nums.replace(/(\d{5})(\d{1,3})$/, '$1-$2')
+}
+
 export default function NovoClientePage() {
   const router = useRouter()
   const { showToast } = useToast()
@@ -30,7 +62,12 @@ export default function NovoClientePage() {
   })
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value })
+    const { name, value } = e.target
+    let masked = value
+    if (name === 'cpf_cnpj') masked = maskCpfCnpj(value)
+    else if (name === 'telefone') masked = maskTelefone(value)
+    else if (name === 'cep') masked = maskCep(value)
+    setForm({ ...form, [name]: masked })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
