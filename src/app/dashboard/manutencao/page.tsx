@@ -31,7 +31,7 @@ export default function ManutencaoPage() {
     try {
       const [manRes, eqRes] = await Promise.all([
         supabase.from('manutencoes').select('*').order('data_agendada', { ascending: false }),
-        supabase.from('equipamentos').select('id, nome, numero_patrimonio').eq('ativo', true).order('nome')
+        supabase.from('equipamentos').select('id, nome, numero_patrimonio, asset_id').eq('ativo', true).order('nome')
       ])
 
       const data = manRes.data || []
@@ -57,7 +57,7 @@ export default function ManutencaoPage() {
       const { error } = await supabase.from('manutencoes').insert({
         equipamento_id: parseInt(formData.equipamento_id),
         equipamento_nome: eq?.nome || '',
-        equipamento_codigo: eq?.numero_patrimonio || '',
+        equipamento_codigo: eq?.asset_id || eq?.numero_patrimonio || '',
         tipo: formData.tipo, status: 'agendada',
         data_agendada: formData.data_agendada, tecnico: formData.tecnico,
         custo: parseFloat(formData.custo) || 0, descricao: formData.descricao,
@@ -272,7 +272,7 @@ export default function ManutencaoPage() {
               <select value={formData.equipamento_id} onChange={(e) => setFormData({ ...formData, equipamento_id: e.target.value })}
                 className="px-3 py-2 border border-gray-300 rounded-md">
                 <option value="">Selecionar Equipamento</option>
-                {equipamentos.map(e => <option key={e.id} value={e.id}>{e.nome} {e.numero_patrimonio ? `(${e.numero_patrimonio})` : ''}</option>)}
+                {equipamentos.map(e => <option key={e.id} value={e.id}>{e.asset_id ? `[${e.asset_id}] ` : ''}{e.nome} {e.numero_patrimonio ? `(${e.numero_patrimonio})` : ''}</option>)}
               </select>
               <select value={formData.tipo} onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
                 className="px-3 py-2 border border-gray-300 rounded-md">

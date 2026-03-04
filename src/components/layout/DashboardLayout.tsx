@@ -13,6 +13,7 @@ const navigation = [
   { name: 'Calendário', href: '/dashboard/calendario', icon: '📅' },
   { name: 'Orçamentos', href: '/dashboard/orcamentos', icon: '📋', badge: 'NEW' },
   { name: 'Equipamentos', href: '/dashboard/equipamentos', icon: '📦' },
+  { name: 'Classificação', href: '/dashboard/equipamentos/classificacao', icon: '🏷️' },
   { name: 'Manutenção', href: '/dashboard/manutencao', icon: '🔧' },
   { name: 'Clientes', href: '/dashboard/clientes', icon: '👥' },
   { name: 'Fornecedores', href: '/dashboard/fornecedores', icon: '🏭' },

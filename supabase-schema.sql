@@ -141,6 +141,111 @@ CREATE TABLE IF NOT EXISTS fornecedores (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 8. CLASSES DE EQUIPAMENTOS (hierarquia: Classe > Subclasse > Tipo)
+CREATE TABLE IF NOT EXISTS equipment_classes (
+  id BIGSERIAL PRIMARY KEY,
+  codigo VARCHAR(3) NOT NULL UNIQUE,
+  nome TEXT NOT NULL,
+  descricao TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 9. SUBCLASSES DE EQUIPAMENTOS
+CREATE TABLE IF NOT EXISTS equipment_subclasses (
+  id BIGSERIAL PRIMARY KEY,
+  class_id BIGINT NOT NULL REFERENCES equipment_classes(id) ON DELETE CASCADE,
+  codigo VARCHAR(3) NOT NULL,
+  nome TEXT NOT NULL,
+  descricao TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(class_id, codigo)
+);
+
+-- 10. TIPOS TÉCNICOS DE EQUIPAMENTOS
+CREATE TABLE IF NOT EXISTS equipment_types (
+  id BIGSERIAL PRIMARY KEY,
+  codigo VARCHAR(4) NOT NULL UNIQUE,
+  nome TEXT NOT NULL,
+  descricao TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Adicionar colunas de classificação na tabela equipamentos
+ALTER TABLE equipamentos ADD COLUMN IF NOT EXISTS classe_id BIGINT REFERENCES equipment_classes(id);
+ALTER TABLE equipamentos ADD COLUMN IF NOT EXISTS subclasse_id BIGINT REFERENCES equipment_subclasses(id);
+ALTER TABLE equipamentos ADD COLUMN IF NOT EXISTS tipo_id BIGINT REFERENCES equipment_types(id);
+ALTER TABLE equipamentos ADD COLUMN IF NOT EXISTS numero_ativo INTEGER;
+ALTER TABLE equipamentos ADD COLUMN IF NOT EXISTS asset_id TEXT;
+ALTER TABLE equipamentos ADD COLUMN IF NOT EXISTS numero_serie TEXT;
+ALTER TABLE equipamentos ADD COLUMN IF NOT EXISTS ano_fabricacao INTEGER;
+ALTER TABLE equipamentos ADD COLUMN IF NOT EXISTS numero_frota TEXT;
+
+-- SEED: Classes pré-cadastradas
+INSERT INTO equipment_classes (codigo, nome, descricao) VALUES
+  ('EAR', 'Terraplanagem', 'Equipamentos para movimentação de terra'),
+  ('CMP', 'Compactação', 'Rolos compactadores e placas vibratórias'),
+  ('ACS', 'Acesso', 'Plataformas elevatórias e equipamentos de acesso'),
+  ('SUP', 'Escoramento', 'Escoras, formas e sistemas de escoramento'),
+  ('ENE', 'Energia', 'Geradores, compressores e equipamentos de energia'),
+  ('CON', 'Concretagem', 'Betoneiras, bombas de concreto e vibradores'),
+  ('GUI', 'Guindastes', 'Guindastes, gruas e equipamentos de içamento'),
+  ('FER', 'Ferramentas', 'Ferramentas elétricas e pneumáticas'),
+  ('VEI', 'Veículos', 'Caminhões, carretas e veículos utilitários'),
+  ('SOL', 'Soldagem', 'Máquinas de solda e equipamentos de corte')
+ON CONFLICT (codigo) DO NOTHING;
+
+-- SEED: Subclasses pré-cadastradas
+INSERT INTO equipment_subclasses (class_id, codigo, nome, descricao)
+SELECT c.id, s.codigo, s.nome, s.descricao
+FROM equipment_classes c
+CROSS JOIN (VALUES
+  ('EAR', 'RET', 'Retroescavadeira', 'Retroescavadeiras e carregadeiras'),
+  ('EAR', 'ESC', 'Escavadeira', 'Escavadeiras hidráulicas'),
+  ('EAR', 'MOT', 'Motoniveladora', 'Motoniveladoras e plainas'),
+  ('EAR', 'CAR', 'Carregadeira', 'Pás carregadeiras'),
+  ('CMP', 'ROL', 'Rolo Compactador', 'Rolos compactadores vibratórios'),
+  ('CMP', 'PLA', 'Placa Vibratória', 'Placas e sapatas vibratórias'),
+  ('CMP', 'CPP', 'Compactador Pneu', 'Compactadores de pneus'),
+  ('ACS', 'TES', 'Tesoura', 'Plataformas tesoura'),
+  ('ACS', 'ART', 'Articulada', 'Plataformas articuladas'),
+  ('ACS', 'TEL', 'Telescópica', 'Plataformas telescópicas'),
+  ('SUP', 'ESC', 'Escora', 'Escoras metálicas e de madeira'),
+  ('SUP', 'FOR', 'Forma', 'Formas metálicas e de madeira'),
+  ('SUP', 'AND', 'Andaime', 'Andaimes tubulares e fachadeiros'),
+  ('ENE', 'GER', 'Gerador', 'Geradores de energia'),
+  ('ENE', 'CPS', 'Compressor', 'Compressores de ar'),
+  ('ENE', 'TRF', 'Transformador', 'Transformadores e estabilizadores'),
+  ('CON', 'BET', 'Betoneira', 'Betoneiras estacionárias e autocarregáveis'),
+  ('CON', 'BMB', 'Bomba', 'Bombas de concreto'),
+  ('CON', 'VIB', 'Vibrador', 'Vibradores de concreto'),
+  ('GUI', 'GRT', 'Grua Torre', 'Gruas de torre'),
+  ('GUI', 'GMO', 'Guindaste Móvel', 'Guindastes sobre rodas e esteiras'),
+  ('GUI', 'MUN', 'Munck', 'Caminhões munck'),
+  ('FER', 'ELE', 'Elétrica', 'Ferramentas elétricas'),
+  ('FER', 'PNE', 'Pneumática', 'Ferramentas pneumáticas'),
+  ('FER', 'HID', 'Hidráulica', 'Ferramentas hidráulicas'),
+  ('VEI', 'CAM', 'Caminhão', 'Caminhões diversos'),
+  ('VEI', 'CAR', 'Carreta', 'Carretas e semi-reboques'),
+  ('VEI', 'UTI', 'Utilitário', 'Veículos utilitários'),
+  ('SOL', 'MIG', 'MIG/MAG', 'Máquinas de solda MIG/MAG'),
+  ('SOL', 'ELT', 'Eletrodo', 'Máquinas de solda por eletrodo'),
+  ('SOL', 'TIG', 'TIG', 'Máquinas de solda TIG')
+) AS s(class_code, codigo, nome, descricao)
+WHERE c.codigo = s.class_code
+ON CONFLICT (class_id, codigo) DO NOTHING;
+
+-- SEED: Tipos técnicos pré-cadastrados
+INSERT INTO equipment_types (codigo, nome, descricao) VALUES
+  ('STD', 'Standard', 'Configuração padrão'),
+  ('HD', 'Heavy Duty', 'Configuração reforçada'),
+  ('4X4', '4x4', 'Tração nas quatro rodas'),
+  ('4X2', '4x2', 'Tração simples'),
+  ('ELE', 'Elétrico', 'Motor elétrico'),
+  ('DSL', 'Diesel', 'Motor diesel'),
+  ('GAS', 'Gasolina', 'Motor gasolina'),
+  ('HBR', 'Híbrido', 'Motor híbrido')
+ON CONFLICT (codigo) DO NOTHING;
+
 -- HABILITAR RLS (Row Level Security) com políticas permissivas para desenvolvimento
 ALTER TABLE clientes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE equipamentos ENABLE ROW LEVEL SECURITY;
@@ -150,6 +255,10 @@ ALTER TABLE faturas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE manutencoes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE fornecedores ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE equipment_classes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE equipment_subclasses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE equipment_types ENABLE ROW LEVEL SECURITY;
+
 -- Políticas permissivas (permitir tudo para anon e authenticated)
 CREATE POLICY "Acesso total clientes" ON clientes FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Acesso total equipamentos" ON equipamentos FOR ALL USING (true) WITH CHECK (true);
@@ -158,3 +267,6 @@ CREATE POLICY "Acesso total locacoes" ON locacoes FOR ALL USING (true) WITH CHEC
 CREATE POLICY "Acesso total faturas" ON faturas FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Acesso total manutencoes" ON manutencoes FOR ALL USING (true) WITH CHECK (true);
 CREATE POLICY "Acesso total fornecedores" ON fornecedores FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acesso total equipment_classes" ON equipment_classes FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acesso total equipment_subclasses" ON equipment_subclasses FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Acesso total equipment_types" ON equipment_types FOR ALL USING (true) WITH CHECK (true);

@@ -8,17 +8,33 @@ import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
 import { supabase } from '@/lib/supabase'
 
+interface Classe {
+  id: number
+  codigo: string
+  nome: string
+}
+
+interface Subclasse {
+  id: number
+  class_id: number
+  codigo: string
+  nome: string
+}
+
 export default function EquipamentosPage() {
   const router = useRouter()
   const [equipamentos, setEquipamentos] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [filtroStatus, setFiltroStatus] = useState('todos')
-  const [filtroMarca, setFiltroMarca] = useState('todos')
+  const [filtroClasse, setFiltroClasse] = useState('todos')
+  const [filtroSubclasse, setFiltroSubclasse] = useState('todos')
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(0)
   const [totalCount, setTotalCount] = useState(0)
-  const [marcasDisponiveis, setMarcasDisponiveis] = useState([])
+  const [classes, setClasses] = useState<Classe[]>([])
+  const [subclasses, setSubclasses] = useState<Subclasse[]>([])
+  const [subclassesFiltradas, setSubclassesFiltradas] = useState<Subclasse[]>([])
   const [stats, setStats] = useState({
     disponivel: 0,
     locado: 0,
@@ -29,10 +45,35 @@ export default function EquipamentosPage() {
   const ITEMS_PER_PAGE = 20
 
   useEffect(() => {
-    carregarEquipamentos()
-    carregarMarcas()
+    carregarClassificacoes()
     carregarStats()
-  }, [currentPage, searchTerm, filtroStatus, filtroMarca])
+  }, [])
+
+  useEffect(() => {
+    carregarEquipamentos()
+  }, [currentPage, searchTerm, filtroStatus, filtroClasse, filtroSubclasse])
+
+  useEffect(() => {
+    if (filtroClasse !== 'todos') {
+      setSubclassesFiltradas(subclasses.filter(s => s.class_id === parseInt(filtroClasse)))
+    } else {
+      setSubclassesFiltradas(subclasses)
+    }
+    setFiltroSubclasse('todos')
+  }, [filtroClasse, subclasses])
+
+  const carregarClassificacoes = async () => {
+    try {
+      const [classesRes, subclassesRes] = await Promise.all([
+        supabase.from('equipment_classes').select('*').order('codigo'),
+        supabase.from('equipment_subclasses').select('*').order('codigo')
+      ])
+      setClasses(classesRes.data || [])
+      setSubclasses(subclassesRes.data || [])
+    } catch {
+      console.error('Erro ao carregar classificacoes')
+    }
+  }
 
   const carregarStats = async () => {
     try {
@@ -56,25 +97,7 @@ export default function EquipamentosPage() {
 
       setStats(statsCount)
     } catch (error) {
-      console.error('Erro ao carregar estatísticas:', error)
-    }
-  }
-
-  const carregarMarcas = async () => {
-    try {
-      const { data } = await supabase
-        .from('equipamentos')
-        .select('marca')
-        .not('marca', 'is', null)
-        .neq('marca', '')
-
-      const marcasUnicas = [...new Set(data?.map(item => item.marca) || [])]
-        .filter(marca => marca && marca.trim())
-        .sort()
-
-      setMarcasDisponiveis(marcasUnicas)
-    } catch (error) {
-      console.error('Erro ao carregar marcas:', error)
+      console.error('Erro ao carregar estatisticas:', error)
     }
   }
 
@@ -82,27 +105,28 @@ export default function EquipamentosPage() {
     try {
       setLoading(true)
 
-      // Construir query base
       let query = supabase
         .from('equipamentos')
         .select('*', { count: 'exact' })
         .eq('ativo', true)
         .order('created_at', { ascending: false })
 
-      // Aplicar filtros
       if (searchTerm) {
-        query = query.or(`nome.ilike.%${searchTerm}%,marca.ilike.%${searchTerm}%,modelo.ilike.%${searchTerm}%,numero_patrimonio.ilike.%${searchTerm}%`)
+        query = query.or(`nome.ilike.%${searchTerm}%,marca.ilike.%${searchTerm}%,modelo.ilike.%${searchTerm}%,numero_patrimonio.ilike.%${searchTerm}%,asset_id.ilike.%${searchTerm}%`)
       }
 
       if (filtroStatus !== 'todos') {
         query = query.eq('status', filtroStatus)
       }
 
-      if (filtroMarca !== 'todos') {
-        query = query.eq('marca', filtroMarca)
+      if (filtroClasse !== 'todos') {
+        query = query.eq('classe_id', parseInt(filtroClasse))
       }
 
-      // Aplicar paginação
+      if (filtroSubclasse !== 'todos') {
+        query = query.eq('subclasse_id', parseInt(filtroSubclasse))
+      }
+
       const from = (currentPage - 1) * ITEMS_PER_PAGE
       const to = from + ITEMS_PER_PAGE - 1
 
@@ -134,14 +158,14 @@ export default function EquipamentosPage() {
 
   const getStatusBadge = (status) => {
     const configs = {
-      disponivel: { label: 'Disponível', color: 'bg-green-100 text-green-800' },
+      disponivel: { label: 'Disponivel', color: 'bg-green-100 text-green-800' },
       locado: { label: 'Locado', color: 'bg-blue-100 text-blue-800' },
-      manutencao: { label: 'Manutenção', color: 'bg-yellow-100 text-yellow-800' },
+      manutencao: { label: 'Manutencao', color: 'bg-yellow-100 text-yellow-800' },
       inativo: { label: 'Inativo', color: 'bg-red-100 text-red-800' }
     }
 
     const config = configs[status] || { label: status, color: 'bg-gray-100 text-gray-800' }
-    
+
     return (
       <Badge className={`${config.color} text-xs`}>
         {config.label}
@@ -151,7 +175,7 @@ export default function EquipamentosPage() {
 
   const handleSearchChange = useCallback((e) => {
     setSearchTerm(e.target.value)
-    setCurrentPage(1) // Reset to first page when searching
+    setCurrentPage(1)
   }, [])
 
   const handleStatusChange = useCallback((e) => {
@@ -159,8 +183,13 @@ export default function EquipamentosPage() {
     setCurrentPage(1)
   }, [])
 
-  const handleMarcaChange = useCallback((e) => {
-    setFiltroMarca(e.target.value)
+  const handleClasseChange = useCallback((e) => {
+    setFiltroClasse(e.target.value)
+    setCurrentPage(1)
+  }, [])
+
+  const handleSubclasseChange = useCallback((e) => {
+    setFiltroSubclasse(e.target.value)
     setCurrentPage(1)
   }, [])
 
@@ -173,7 +202,8 @@ export default function EquipamentosPage() {
   const clearFilters = () => {
     setSearchTerm('')
     setFiltroStatus('todos')
-    setFiltroMarca('todos')
+    setFiltroClasse('todos')
+    setFiltroSubclasse('todos')
     setCurrentPage(1)
   }
 
@@ -194,20 +224,25 @@ export default function EquipamentosPage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Equipamentos</h1>
           <p className="text-gray-600 mt-2">
-            {formatarNumero(totalCount)} equipamentos no inventário
+            {formatarNumero(totalCount)} equipamentos no inventario
           </p>
         </div>
-        <Button onClick={() => router.push('/dashboard/equipamentos/novo')}>
-          + Novo Equipamento
-        </Button>
+        <div className="flex space-x-3">
+          <Button variant="outline" onClick={() => router.push('/dashboard/equipamentos/classificacao')}>
+            Classificacao
+          </Button>
+          <Button onClick={() => router.push('/dashboard/equipamentos/novo')}>
+            + Novo Equipamento
+          </Button>
+        </div>
       </div>
 
-      {/* Estatísticas Rápidas */}
+      {/* Estatisticas Rapidas */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card className="text-center">
           <CardContent className="p-4">
             <div className="text-2xl font-bold text-green-600">{formatarNumero(stats.disponivel)}</div>
-            <div className="text-sm text-gray-600">Disponíveis</div>
+            <div className="text-sm text-gray-600">Disponiveis</div>
           </CardContent>
         </Card>
         <Card className="text-center">
@@ -219,7 +254,7 @@ export default function EquipamentosPage() {
         <Card className="text-center">
           <CardContent className="p-4">
             <div className="text-2xl font-bold text-yellow-600">{formatarNumero(stats.manutencao)}</div>
-            <div className="text-sm text-gray-600">Manutenção</div>
+            <div className="text-sm text-gray-600">Manutencao</div>
           </CardContent>
         </Card>
         <Card className="text-center">
@@ -236,10 +271,10 @@ export default function EquipamentosPage() {
           <CardTitle>Filtros e Busca</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div>
               <Input
-                placeholder="Buscar equipamentos..."
+                placeholder="Buscar por nome, marca, Asset ID..."
                 value={searchTerm}
                 onChange={handleSearchChange}
                 className="w-full"
@@ -252,21 +287,34 @@ export default function EquipamentosPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="todos">Todos os status</option>
-                <option value="disponivel">Disponível</option>
+                <option value="disponivel">Disponivel</option>
                 <option value="locado">Locado</option>
-                <option value="manutencao">Manutenção</option>
+                <option value="manutencao">Manutencao</option>
                 <option value="inativo">Inativo</option>
               </select>
             </div>
             <div>
               <select
-                value={filtroMarca}
-                onChange={handleMarcaChange}
+                value={filtroClasse}
+                onChange={handleClasseChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="todos">Todas as marcas</option>
-                {marcasDisponiveis.map(marca => (
-                  <option key={marca} value={marca}>{marca}</option>
+                <option value="todos">Todas as classes</option>
+                {classes.map(c => (
+                  <option key={c.id} value={c.id}>{c.codigo} - {c.nome}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <select
+                value={filtroSubclasse}
+                onChange={handleSubclasseChange}
+                disabled={filtroClasse === 'todos'}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100"
+              >
+                <option value="todos">Todas subclasses</option>
+                {subclassesFiltradas.map(s => (
+                  <option key={s.id} value={s.id}>{s.codigo} - {s.nome}</option>
                 ))}
               </select>
             </div>
@@ -287,7 +335,7 @@ export default function EquipamentosPage() {
               Equipamentos ({formatarNumero(totalCount)} total)
             </CardTitle>
             <div className="text-sm text-gray-600">
-              Página {currentPage} de {totalPages}
+              Pagina {currentPage} de {totalPages}
             </div>
           </div>
         </CardHeader>
@@ -300,8 +348,8 @@ export default function EquipamentosPage() {
           ) : equipamentos.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-gray-500 mb-4">
-                {searchTerm || filtroStatus !== 'todos' || filtroMarca !== 'todos'
-                  ? 'Nenhum equipamento encontrado com os filtros aplicados' 
+                {searchTerm || filtroStatus !== 'todos' || filtroClasse !== 'todos'
+                  ? 'Nenhum equipamento encontrado com os filtros aplicados'
                   : 'Nenhum equipamento cadastrado'}
               </p>
               <Button onClick={clearFilters}>
@@ -315,15 +363,26 @@ export default function EquipamentosPage() {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                       <div className="w-16 h-16 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <span className="text-2xl">🔧</span>
+                        {equipamento.asset_id ? (
+                          <span className="text-xs font-bold font-mono text-blue-700 text-center leading-tight px-1">
+                            {equipamento.asset_id.split('-').slice(0, 2).join('-')}
+                          </span>
+                        ) : (
+                          <span className="text-2xl">🔧</span>
+                        )}
                       </div>
-                      
+
                       <div>
                         <div className="flex items-center gap-2 mb-2">
+                          {equipamento.asset_id && (
+                            <span className="font-mono text-sm font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
+                              {equipamento.asset_id}
+                            </span>
+                          )}
                           <h3 className="font-semibold text-gray-900">{equipamento.nome}</h3>
                           {getStatusBadge(equipamento.status)}
                         </div>
-                        
+
                         <div className="text-sm text-gray-600 space-y-1">
                           {equipamento.marca && equipamento.modelo && (
                             <div className="flex items-center gap-2">
@@ -331,31 +390,36 @@ export default function EquipamentosPage() {
                               <span>{equipamento.marca} - {equipamento.modelo}</span>
                             </div>
                           )}
-                          {equipamento.numero_patrimonio && (
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">Patrimônio:</span>
-                              <span>{equipamento.numero_patrimonio}</span>
-                            </div>
-                          )}
+                          <div className="flex items-center gap-4">
+                            {equipamento.numero_patrimonio && (
+                              <span><span className="font-medium">Patrimonio:</span> {equipamento.numero_patrimonio}</span>
+                            )}
+                            {equipamento.numero_serie && (
+                              <span><span className="font-medium">Serie:</span> {equipamento.numero_serie}</span>
+                            )}
+                            {equipamento.numero_frota && (
+                              <span><span className="font-medium">Frota:</span> {equipamento.numero_frota}</span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-2">
-                            <span className="font-medium">Diária:</span>
+                            <span className="font-medium">Diaria:</span>
                             <span className="text-green-600 font-semibold">{formatarMoeda(equipamento.preco_unitario_dia)}</span>
                           </div>
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center space-x-2">
                       <Button variant="outline" size="sm" onClick={() => router.push(`/dashboard/equipamentos/${equipamento.id}/editar`)}>
                         Editar
                       </Button>
-                      
-                      <Button 
+
+                      <Button
                         size="sm"
                         disabled={equipamento.status !== 'disponivel'}
                         onClick={() => router.push(`/dashboard/orcamentos/novo?equipamento=${equipamento.id}`)}
                       >
-                        + Orçamento
+                        + Orcamento
                       </Button>
                     </div>
                   </div>
@@ -366,33 +430,33 @@ export default function EquipamentosPage() {
         </CardContent>
       </Card>
 
-      {/* Paginação */}
+      {/* Paginacao */}
       {totalPages > 1 && (
         <Card>
           <CardContent className="p-4">
             <div className="flex justify-between items-center">
               <div className="text-sm text-gray-600">
-                Mostrando {(currentPage - 1) * ITEMS_PER_PAGE + 1} até {Math.min(currentPage * ITEMS_PER_PAGE, totalCount)} de {formatarNumero(totalCount)} equipamentos
+                Mostrando {(currentPage - 1) * ITEMS_PER_PAGE + 1} ate {Math.min(currentPage * ITEMS_PER_PAGE, totalCount)} de {formatarNumero(totalCount)} equipamentos
               </div>
-              
+
               <div className="flex items-center space-x-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => navigateToPage(currentPage - 1)}
                   disabled={currentPage === 1}
                 >
                   Anterior
                 </Button>
-                
+
                 <div className="flex space-x-1">
                   {[...Array(Math.min(5, totalPages))].map((_, index) => {
-                    const pageNumber = currentPage <= 3 
-                      ? index + 1 
+                    const pageNumber = currentPage <= 3
+                      ? index + 1
                       : currentPage + index - 2
-                    
+
                     if (pageNumber > totalPages) return null
-                    
+
                     return (
                       <Button
                         key={pageNumber}
@@ -406,14 +470,14 @@ export default function EquipamentosPage() {
                     )
                   })}
                 </div>
-                
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={() => navigateToPage(currentPage + 1)}
                   disabled={currentPage === totalPages}
                 >
-                  Próxima
+                  Proxima
                 </Button>
               </div>
             </div>

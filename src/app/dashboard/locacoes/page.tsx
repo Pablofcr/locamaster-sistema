@@ -32,7 +32,7 @@ export default function LocacoesPage() {
       const [locRes, cliRes, eqRes] = await Promise.all([
         supabase.from('locacoes').select('*').order('created_at', { ascending: false }),
         supabase.from('clientes').select('id, nome').order('nome'),
-        supabase.from('equipamentos').select('id, nome, preco_unitario_dia, preco_dia').eq('status', 'disponivel').eq('ativo', true).order('nome')
+        supabase.from('equipamentos').select('id, nome, asset_id, preco_unitario_dia, preco_dia').eq('status', 'disponivel').eq('ativo', true).order('nome')
       ])
 
       const data = locRes.data || []
@@ -255,7 +255,7 @@ export default function LocacoesPage() {
               <select value={formData.equipamento_id} onChange={(e) => setFormData({ ...formData, equipamento_id: e.target.value })}
                 className="px-3 py-2 border border-gray-300 rounded-md">
                 <option value="">Selecionar Equipamento</option>
-                {equipamentos.map(e => <option key={e.id} value={e.id}>{e.nome} ({formatarMoeda(Number(e.preco_unitario_dia) || Number(e.preco_dia) || 0)}/dia)</option>)}
+                {equipamentos.map(e => <option key={e.id} value={e.id}>{e.asset_id ? `[${e.asset_id}] ` : ''}{e.nome} ({formatarMoeda(Number(e.preco_unitario_dia) || Number(e.preco_dia) || 0)}/dia)</option>)}
               </select>
               <Input placeholder="Data Início" type="date" value={formData.data_inicio} onChange={(e) => setFormData({ ...formData, data_inicio: e.target.value })} />
               <Input placeholder="Data Fim" type="date" value={formData.data_fim} onChange={(e) => setFormData({ ...formData, data_fim: e.target.value })} />
