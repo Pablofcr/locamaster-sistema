@@ -31,6 +31,9 @@ interface Equipamento {
   preco_mensal?: number
   preco_unitario_dia?: number
   status: string
+  controle_quantidade?: boolean
+  quantidade_total?: number
+  quantidade_disponivel?: number
 }
 
 interface ItemOrcamento {
@@ -396,15 +399,30 @@ export default function NovoOrcamentoPage() {
                           {eq.nome}
                         </h4>
                         <p className="text-sm text-gray-600">{eq.marca} {eq.modelo && `- ${eq.modelo}`} {eq.categoria && `- ${eq.categoria}`}</p>
-                        <p className="text-sm font-medium text-green-600">{formatarMoeda(calcularPrecoModalidade(eq))}/{modalidadeLocacao}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium text-green-600">{formatarMoeda(calcularPrecoModalidade(eq))}/{modalidadeLocacao}</p>
+                          {eq.controle_quantidade && (
+                            <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                              (eq.quantidade_disponivel || 0) > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                              Estoque: {eq.quantidade_disponivel} / {eq.quantidade_total}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <Input type="number" min="0" placeholder="Qtd"
+                        <Input type="number" min="0"
+                          max={eq.controle_quantidade ? eq.quantidade_disponivel : undefined}
+                          placeholder="Qtd"
                           value={equipamentosSelecionados[eq.id] || ''}
                           onChange={(e) => setEquipamentosSelecionados({ ...equipamentosSelecionados, [eq.id]: parseInt(e.target.value) || 0 })}
                           className="w-20" />
                         <Button onClick={() => {
                           const qtd = equipamentosSelecionados[eq.id] || 1
+                          if (eq.controle_quantidade && qtd > (eq.quantidade_disponivel || 0)) {
+                            showToast(`Maximo disponivel: ${eq.quantidade_disponivel}`, 'warning')
+                            return
+                          }
                           if (qtd > 0) { adicionarEquipamento(eq, qtd); setEquipamentosSelecionados({ ...equipamentosSelecionados, [eq.id]: 0 }) }
                         }} disabled={!equipamentosSelecionados[eq.id]} size="sm">Adicionar</Button>
                       </div>

@@ -381,6 +381,15 @@ export default function EquipamentosPage() {
                           )}
                           <h3 className="font-semibold text-gray-900">{equipamento.nome}</h3>
                           {getStatusBadge(equipamento.status)}
+                          {equipamento.controle_quantidade && (
+                            <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                              equipamento.quantidade_disponivel > 0
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-red-100 text-red-800'
+                            }`}>
+                              {equipamento.quantidade_disponivel} / {equipamento.quantidade_total} disponiveis
+                            </span>
+                          )}
                         </div>
 
                         <div className="text-sm text-gray-600 space-y-1">
@@ -416,7 +425,10 @@ export default function EquipamentosPage() {
 
                       <Button
                         size="sm"
-                        disabled={equipamento.status !== 'disponivel'}
+                        disabled={equipamento.controle_quantidade
+                          ? equipamento.quantidade_disponivel <= 0
+                          : equipamento.status !== 'disponivel'
+                        }
                         onClick={() => router.push(`/dashboard/orcamentos/novo?equipamento=${equipamento.id}`)}
                       >
                         + Orcamento

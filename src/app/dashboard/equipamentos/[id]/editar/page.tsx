@@ -81,14 +81,19 @@ export default function EditarEquipamentoPage() {
     preco_unitario_dia: '',
     preco_dia: '',
     preco_mensal: '',
-    observacoes: ''
+    observacoes: '',
+    controle_quantidade: false,
+    quantidade_total: '',
+    quantidade_disponivel: ''
   })
 
-  // Track original values for asset_id regeneration
+  // Track original values for asset_id regeneration and quantity
   const [originalClasseId, setOriginalClasseId] = useState('')
   const [originalSubclasseId, setOriginalSubclasseId] = useState('')
   const [originalTipoId, setOriginalTipoId] = useState('')
   const [originalNumeroAtivo, setOriginalNumeroAtivo] = useState<number | null>(null)
+  const [originalQuantidadeTotal, setOriginalQuantidadeTotal] = useState(1)
+  const [originalQuantidadeDisponivel, setOriginalQuantidadeDisponivel] = useState(1)
 
   useEffect(() => {
     carregarClassificacoes()
@@ -158,7 +163,10 @@ export default function EditarEquipamentoPage() {
           preco_unitario_dia: formatarMoedaInicial(data.preco_unitario_dia),
           preco_dia: formatarMoedaInicial(data.preco_dia),
           preco_mensal: formatarMoedaInicial(data.preco_mensal),
-          observacoes: data.observacoes || ''
+          observacoes: data.observacoes || '',
+          controle_quantidade: data.controle_quantidade || false,
+          quantidade_total: data.quantidade_total ? String(data.quantidade_total) : '1',
+          quantidade_disponivel: data.quantidade_disponivel ? String(data.quantidade_disponivel) : '1'
         })
 
         setOriginalClasseId(classeId)
@@ -166,6 +174,8 @@ export default function EditarEquipamentoPage() {
         setOriginalTipoId(tipoId)
         setOriginalNumeroAtivo(data.numero_ativo)
         setAssetIdOriginal(data.asset_id || '')
+        setOriginalQuantidadeTotal(data.quantidade_total || 1)
+        setOriginalQuantidadeDisponivel(data.quantidade_disponivel || 1)
       }
     } catch (error: any) {
       showToast('Erro ao carregar equipamento', 'error')
@@ -202,7 +212,14 @@ export default function EditarEquipamentoPage() {
       masked = maskMoeda(value)
     }
 
-    setForm({ ...form, [name]: masked })
+    if (name === 'preco_mensal') {
+      const valorMensal = parseMoeda(masked)
+      const valorDiaria = valorMensal / 30
+      const diariaFormatada = valorMensal > 0 ? maskMoeda(String(Math.round(valorDiaria * 100))) : ''
+      setForm({ ...form, preco_mensal: masked, preco_dia: diariaFormatada, preco_unitario_dia: diariaFormatada })
+    } else {
+      setForm({ ...form, [name]: masked })
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -210,6 +227,11 @@ export default function EditarEquipamentoPage() {
 
     if (!form.nome.trim()) {
       showToast('Nome do equipamento e obrigatorio', 'error')
+      return
+    }
+
+    if (form.controle_quantidade && (!form.quantidade_total || parseInt(form.quantidade_total) < 1)) {
+      showToast('Informe a quantidade total (minimo 1)', 'error')
       return
     }
 
@@ -257,6 +279,11 @@ export default function EditarEquipamentoPage() {
         numero_ativo = null
       }
 
+      // Calculate quantity fields
+      const novoTotal = form.controle_quantidade && form.quantidade_total ? parseInt(form.quantidade_total) : 1
+      const emUso = originalQuantidadeTotal - originalQuantidadeDisponivel
+      const novoDisponivel = form.controle_quantidade ? Math.max(0, novoTotal - emUso) : 1
+
       const { error } = await supabase
         .from('equipamentos')
         .update({
@@ -276,7 +303,10 @@ export default function EditarEquipamentoPage() {
           preco_unitario_dia: parseMoeda(form.preco_unitario_dia),
           preco_dia: parseMoeda(form.preco_dia),
           preco_mensal: parseMoeda(form.preco_mensal),
-          observacoes: form.observacoes.trim() || null
+          observacoes: form.observacoes.trim() || null,
+          controle_quantidade: form.controle_quantidade,
+          quantidade_total: novoTotal,
+          quantidade_disponivel: novoDisponivel
         })
         .eq('id', params.id)
 
@@ -408,6 +438,51 @@ export default function EditarEquipamentoPage() {
                 )}
               </div>
             )}
+
+            <div className="mt-4 p-4 border border-gray-200 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Controle por Quantidade</label>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {form.controle_quantidade
+                      ? 'Item quantificavel — um registro representa varias unidades iguais'
+                      : 'Equipamento individual — um registro = uma unidade'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setForm(prev => ({ ...prev, controle_quantidade: !prev.controle_quantidade, quantidade_total: prev.controle_quantidade ? '1' : prev.quantidade_total }))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${form.controle_quantidade ? 'bg-blue-600' : 'bg-gray-300'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${form.controle_quantidade ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+              {form.controle_quantidade && (
+                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Quantidade Total *</label>
+                    <Input
+                      name="quantidade_total"
+                      type="number"
+                      min="1"
+                      placeholder="Ex: 1000"
+                      value={form.quantidade_total}
+                      onChange={handleChange}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Quantidade Disponivel</label>
+                    <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-gray-700">
+                      {(() => {
+                        const emUso = originalQuantidadeTotal - originalQuantidadeDisponivel
+                        const novoTotal = parseInt(form.quantidade_total) || 0
+                        return `${Math.max(0, novoTotal - emUso)} / ${novoTotal} (${emUso} em uso)`
+                      })()}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -508,30 +583,33 @@ export default function EditarEquipamentoPage() {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Valor Unitario/Dia</label>
-                <Input
-                  name="preco_unitario_dia"
-                  placeholder="R$ 0,00"
-                  value={form.preco_unitario_dia}
-                  onChange={handleChange}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Valor Diaria</label>
-                <Input
-                  name="preco_dia"
-                  placeholder="R$ 0,00"
-                  value={form.preco_dia}
-                  onChange={handleChange}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Valor Mensal</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Valor Mensal *</label>
                 <Input
                   name="preco_mensal"
                   placeholder="R$ 0,00"
                   value={form.preco_mensal}
                   onChange={handleChange}
+                />
+                <p className="text-xs text-gray-400 mt-1">Base para calculo da diaria (mensal / 30)</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Valor Diaria</label>
+                <Input
+                  name="preco_dia"
+                  placeholder="Calculado automaticamente"
+                  value={form.preco_dia}
+                  readOnly
+                  className="bg-gray-50"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Valor Unitario/Dia</label>
+                <Input
+                  name="preco_unitario_dia"
+                  placeholder="Calculado automaticamente"
+                  value={form.preco_unitario_dia}
+                  readOnly
+                  className="bg-gray-50"
                 />
               </div>
             </div>

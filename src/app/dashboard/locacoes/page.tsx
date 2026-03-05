@@ -21,7 +21,7 @@ export default function LocacoesPage() {
 
   const [formData, setFormData] = useState({
     cliente_id: '', equipamento_id: '', data_inicio: '', data_fim: '',
-    local_entrega: '', valor_dia: '', observacoes: ''
+    local_entrega: '', valor_dia: '', observacoes: '', quantidade: '1'
   })
 
   useEffect(() => { carregarDados() }, [])
@@ -32,7 +32,7 @@ export default function LocacoesPage() {
       const [locRes, cliRes, eqRes] = await Promise.all([
         supabase.from('locacoes').select('*').order('created_at', { ascending: false }),
         supabase.from('clientes').select('id, nome').order('nome'),
-        supabase.from('equipamentos').select('id, nome, asset_id, preco_unitario_dia, preco_dia').eq('status', 'disponivel').eq('ativo', true).order('nome')
+        supabase.from('equipamentos').select('id, nome, asset_id, preco_unitario_dia, preco_dia, controle_quantidade, quantidade_total, quantidade_disponivel').eq('ativo', true).order('nome')
       ])
 
       const data = locRes.data || []
@@ -61,10 +61,19 @@ export default function LocacoesPage() {
     try {
       const cliente = clientes.find(c => c.id === parseInt(formData.cliente_id))
       const equipamento = equipamentos.find(e => e.id === parseInt(formData.equipamento_id))
+      const qtdLocacao = parseInt(formData.quantidade) || 1
       const valorDia = Number(formData.valor_dia) || Number(equipamento?.preco_unitario_dia) || Number(equipamento?.preco_dia) || 0
       const inicio = new Date(formData.data_inicio)
       const fim = new Date(formData.data_fim)
       const dias = Math.ceil((fim.getTime() - inicio.getTime()) / 86400000)
+
+      // Validate quantity for quantifiable items
+      if (equipamento?.controle_quantidade) {
+        if (qtdLocacao > (equipamento.quantidade_disponivel || 0)) {
+          showToast(`Quantidade indisponivel. Disponivel: ${equipamento.quantidade_disponivel}`, 'warning')
+          return
+        }
+      }
 
       const countRes = await supabase.from('locacoes').select('*', { count: 'exact', head: true })
       const numero = `LOC-${new Date().getFullYear()}-${String((countRes.count || 0) + 1).padStart(3, '0')}`
@@ -73,17 +82,26 @@ export default function LocacoesPage() {
         numero, cliente_id: parseInt(formData.cliente_id), cliente_nome: cliente?.nome || '',
         equipamento_id: parseInt(formData.equipamento_id), equipamento_nome: equipamento?.nome || '',
         data_inicio: formData.data_inicio, data_fim: formData.data_fim,
-        dias_total: dias, valor_dia: valorDia, valor_total: valorDia * dias,
-        status: 'pendente', local_entrega: formData.local_entrega, observacoes: formData.observacoes
+        dias_total: dias, valor_dia: valorDia, valor_total: valorDia * dias * qtdLocacao,
+        status: 'pendente', local_entrega: formData.local_entrega, observacoes: formData.observacoes,
+        quantidade: qtdLocacao
       })
 
       if (error) throw error
 
-      await supabase.from('equipamentos').update({ status: 'locado' }).eq('id', parseInt(formData.equipamento_id))
+      // Update equipment status/quantity
+      if (equipamento?.controle_quantidade) {
+        const novoDisponivel = (equipamento.quantidade_disponivel || 0) - qtdLocacao
+        const updateData: any = { quantidade_disponivel: novoDisponivel }
+        if (novoDisponivel <= 0) updateData.status = 'locado'
+        await supabase.from('equipamentos').update(updateData).eq('id', parseInt(formData.equipamento_id))
+      } else {
+        await supabase.from('equipamentos').update({ status: 'locado' }).eq('id', parseInt(formData.equipamento_id))
+      }
 
       showToast('Locação criada com sucesso!', 'success')
       setShowForm(false)
-      setFormData({ cliente_id: '', equipamento_id: '', data_inicio: '', data_fim: '', local_entrega: '', valor_dia: '', observacoes: '' })
+      setFormData({ cliente_id: '', equipamento_id: '', data_inicio: '', data_fim: '', local_entrega: '', valor_dia: '', observacoes: '', quantidade: '1' })
       carregarDados()
     } catch (error: any) {
       showToast('Erro ao criar locação: ' + error.message, 'error')
@@ -94,7 +112,19 @@ export default function LocacoesPage() {
     try {
       await supabase.from('locacoes').update({ status: 'finalizado', updated_at: new Date().toISOString() }).eq('id', locacao.id)
       if (locacao.equipamento_id) {
-        await supabase.from('equipamentos').update({ status: 'disponivel' }).eq('id', locacao.equipamento_id)
+        // Check if equipment is quantifiable
+        const { data: eqData } = await supabase.from('equipamentos').select('controle_quantidade, quantidade_disponivel, quantidade_total').eq('id', locacao.equipamento_id).single()
+
+        if (eqData?.controle_quantidade) {
+          const qtdDevolvida = locacao.quantidade || 1
+          const novoDisponivel = Math.min((eqData.quantidade_disponivel || 0) + qtdDevolvida, eqData.quantidade_total || 0)
+          await supabase.from('equipamentos').update({
+            quantidade_disponivel: novoDisponivel,
+            status: 'disponivel'
+          }).eq('id', locacao.equipamento_id)
+        } else {
+          await supabase.from('equipamentos').update({ status: 'disponivel' }).eq('id', locacao.equipamento_id)
+        }
       }
       showToast('Locação finalizada!', 'success')
       carregarDados()
@@ -194,6 +224,11 @@ export default function LocacoesPage() {
                       <div className="text-sm text-gray-600">
                         <span className="font-medium">Cliente:</span> {loc.cliente_nome} -
                         <span className="font-medium"> Equipamento:</span> {loc.equipamento_nome}
+                        {loc.quantidade > 1 && (
+                          <span className="ml-1 text-xs bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded font-medium">
+                            x{loc.quantidade} unidades
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -252,13 +287,35 @@ export default function LocacoesPage() {
                 <option value="">Selecionar Cliente</option>
                 {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
               </select>
-              <select value={formData.equipamento_id} onChange={(e) => setFormData({ ...formData, equipamento_id: e.target.value })}
+              <select value={formData.equipamento_id} onChange={(e) => setFormData({ ...formData, equipamento_id: e.target.value, quantidade: '1' })}
                 className="px-3 py-2 border border-gray-300 rounded-md">
                 <option value="">Selecionar Equipamento</option>
-                {equipamentos.map(e => <option key={e.id} value={e.id}>{e.asset_id ? `[${e.asset_id}] ` : ''}{e.nome} ({formatarMoeda(Number(e.preco_unitario_dia) || Number(e.preco_dia) || 0)}/dia)</option>)}
+                {equipamentos
+                  .filter(e => e.controle_quantidade ? (e.quantidade_disponivel || 0) > 0 : e.status === 'disponivel' || !e.status)
+                  .map(e => (
+                    <option key={e.id} value={e.id}>
+                      {e.asset_id ? `[${e.asset_id}] ` : ''}{e.nome}
+                      {e.controle_quantidade ? ` (${e.quantidade_disponivel} disponiveis)` : ''}
+                      {' '}({formatarMoeda(Number(e.preco_unitario_dia) || Number(e.preco_dia) || 0)}/dia)
+                    </option>
+                  ))}
               </select>
               <Input placeholder="Data Início" type="date" value={formData.data_inicio} onChange={(e) => setFormData({ ...formData, data_inicio: e.target.value })} />
               <Input placeholder="Data Fim" type="date" value={formData.data_fim} onChange={(e) => setFormData({ ...formData, data_fim: e.target.value })} />
+              {(() => {
+                const eqSelecionado = equipamentos.find(e => e.id === parseInt(formData.equipamento_id))
+                if (eqSelecionado?.controle_quantidade) {
+                  return (
+                    <div>
+                      <Input placeholder="Quantidade" type="number" min="1" max={eqSelecionado.quantidade_disponivel}
+                        value={formData.quantidade}
+                        onChange={(e) => setFormData({ ...formData, quantidade: e.target.value })} />
+                      <p className="text-xs text-gray-500 mt-1">Disponivel: {eqSelecionado.quantidade_disponivel} de {eqSelecionado.quantidade_total}</p>
+                    </div>
+                  )
+                }
+                return null
+              })()}
               <Input placeholder="Local de Entrega" value={formData.local_entrega} onChange={(e) => setFormData({ ...formData, local_entrega: e.target.value })} />
               <Input placeholder="Valor por Dia (R$)" type="number" value={formData.valor_dia} onChange={(e) => setFormData({ ...formData, valor_dia: e.target.value })} />
             </div>
