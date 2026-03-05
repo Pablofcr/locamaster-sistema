@@ -264,6 +264,9 @@ export default function OrcamentosPage() {
                       </Button>
                       {(orc.status === 'rascunho' || orc.status === 'enviado') && (
                         <>
+                          <Button variant="outline" size="sm" onClick={() => router.push(`/dashboard/orcamentos/${orc.id}/editar`)}>
+                            Editar
+                          </Button>
                           <Button size="sm" onClick={() => atualizarStatus(orc.id, 'aprovado')} className="bg-green-600 hover:bg-green-700 text-white">
                             Aprovar
                           </Button>
@@ -271,6 +274,15 @@ export default function OrcamentosPage() {
                             Recusar
                           </Button>
                         </>
+                      )}
+                      {orc.status === 'aprovado' && (
+                        <Button variant="danger" size="sm" onClick={() => {
+                          if (confirm('Tem certeza que deseja cancelar este orcamento aprovado?')) {
+                            atualizarStatus(orc.id, 'cancelado')
+                          }
+                        }}>
+                          Cancelar
+                        </Button>
                       )}
                     </div>
                   </div>

@@ -236,22 +236,34 @@ export default function OrcamentoDetalhePage() {
           </Card>
 
           <Card>
-            <CardHeader><CardTitle>Ações</CardTitle></CardHeader>
+            <CardHeader><CardTitle>Acoes</CardTitle></CardHeader>
             <CardContent>
               <div className="space-y-2">
                 {(orcamento.status === 'rascunho' || orcamento.status === 'enviado') && (
                   <>
+                    <Button onClick={() => router.push(`/dashboard/orcamentos/${id}/editar`)} variant="outline" className="w-full">
+                      Editar Orcamento
+                    </Button>
                     <Button onClick={() => atualizarStatus('aprovado')} className="w-full bg-green-600 hover:bg-green-700">
-                      Aprovar Orçamento
+                      Aprovar Orcamento
                     </Button>
                     <Button onClick={() => atualizarStatus('recusado')} variant="danger" className="w-full">
-                      Recusar Orçamento
+                      Recusar Orcamento
                     </Button>
                   </>
                 )}
                 {orcamento.status === 'rascunho' && (
                   <Button onClick={() => atualizarStatus('enviado')} className="w-full">
                     Marcar como Enviado
+                  </Button>
+                )}
+                {orcamento.status === 'aprovado' && (
+                  <Button onClick={() => {
+                    if (confirm('Tem certeza que deseja cancelar este orcamento aprovado?')) {
+                      atualizarStatus('cancelado')
+                    }
+                  }} variant="danger" className="w-full">
+                    Cancelar Orcamento
                   </Button>
                 )}
                 <Button onClick={enviarEmail} variant="outline" className="w-full">
