@@ -246,7 +246,13 @@ INSERT INTO equipment_types (codigo, nome, descricao) VALUES
   ('HBR', 'Híbrido', 'Motor híbrido')
 ON CONFLICT (codigo) DO NOTHING;
 
--- 11. COLUNAS DE AQUISIÇÃO (histórico do equipamento)
+-- 11. COLUNAS DE ENDEREÇO DETALHADO (clientes)
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS logradouro TEXT;
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS numero TEXT;
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS complemento TEXT;
+ALTER TABLE clientes ADD COLUMN IF NOT EXISTS bairro TEXT;
+
+-- 12. COLUNAS DE AQUISIÇÃO (histórico do equipamento)
 ALTER TABLE equipamentos ADD COLUMN IF NOT EXISTS data_aquisicao DATE;
 ALTER TABLE equipamentos ADD COLUMN IF NOT EXISTS fornecedor_id BIGINT REFERENCES fornecedores(id);
 ALTER TABLE equipamentos ADD COLUMN IF NOT EXISTS numero_nota_fiscal TEXT;

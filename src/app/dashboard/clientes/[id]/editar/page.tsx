@@ -57,7 +57,10 @@ export default function EditarClientePage() {
     email: '',
     telefone: '',
     cpf_cnpj: '',
-    endereco: '',
+    logradouro: '',
+    numero: '',
+    complemento: '',
+    bairro: '',
     cidade: '',
     estado: '',
     cep: '',
@@ -84,7 +87,10 @@ export default function EditarClientePage() {
           email: data.email || '',
           telefone: maskTelefone(data.telefone || ''),
           cpf_cnpj: maskCpfCnpj(data.cpf_cnpj || ''),
-          endereco: data.endereco || '',
+          logradouro: data.logradouro || '',
+          numero: data.numero || '',
+          complemento: data.complemento || '',
+          bairro: data.bairro || '',
           cidade: data.cidade || '',
           estado: data.estado || '',
           cep: maskCep(data.cep || ''),
@@ -121,10 +127,6 @@ export default function EditarClientePage() {
       if (!res.ok) throw new Error('CNPJ nao encontrado')
       const data = await res.json()
 
-      const endereco = [data.logradouro, data.numero, data.complemento, data.bairro]
-        .filter(Boolean)
-        .join(', ')
-
       const telefone = data.ddd_telefone_1
         ? data.ddd_telefone_1.replace(/\D/g, '')
         : ''
@@ -134,7 +136,10 @@ export default function EditarClientePage() {
         nome: data.razao_social || prev.nome,
         email: data.email || prev.email,
         telefone: telefone ? maskTelefone(telefone) : prev.telefone,
-        endereco: endereco || prev.endereco,
+        logradouro: data.logradouro || prev.logradouro,
+        numero: data.numero || prev.numero,
+        complemento: data.complemento || prev.complemento,
+        bairro: data.bairro || prev.bairro,
         cidade: data.municipio || prev.cidade,
         estado: data.uf || prev.estado,
         cep: data.cep ? maskCep(data.cep.replace(/\D/g, '')) : prev.cep
@@ -165,7 +170,10 @@ export default function EditarClientePage() {
           email: form.email.trim() || null,
           telefone: form.telefone.trim() || null,
           cpf_cnpj: form.cpf_cnpj.trim() || null,
-          endereco: form.endereco.trim() || null,
+          logradouro: form.logradouro.trim() || null,
+          numero: form.numero.trim() || null,
+          complemento: form.complemento.trim() || null,
+          bairro: form.bairro.trim() || null,
           cidade: form.cidade.trim() || null,
           estado: form.estado || null,
           cep: form.cep.trim() || null,
@@ -289,11 +297,38 @@ export default function EditarClientePage() {
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Endereço</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Logradouro</label>
                 <Input
-                  name="endereco"
-                  placeholder="Rua, número, complemento"
-                  value={form.endereco}
+                  name="logradouro"
+                  placeholder="Rua, Avenida, Travessa..."
+                  value={form.logradouro}
+                  onChange={handleChange}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Numero</label>
+                <Input
+                  name="numero"
+                  placeholder="Ex: 123"
+                  value={form.numero}
+                  onChange={handleChange}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Complemento</label>
+                <Input
+                  name="complemento"
+                  placeholder="Sala, Bloco, Galpao..."
+                  value={form.complemento}
+                  onChange={handleChange}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Bairro</label>
+                <Input
+                  name="bairro"
+                  placeholder="Bairro"
+                  value={form.bairro}
                   onChange={handleChange}
                 />
               </div>
