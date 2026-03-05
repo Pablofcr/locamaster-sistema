@@ -415,15 +415,16 @@ export default function NovoOrcamentoPage() {
                       </div>
                       <div className="flex items-center space-x-2">
                         <Input type="number" min="0"
-                          max={eq.controle_quantidade ? eq.quantidade_disponivel : undefined}
+                          max={eq.controle_quantidade ? eq.quantidade_disponivel : 1}
                           placeholder="Qtd"
                           value={equipamentosSelecionados[eq.id] || ''}
                           onChange={(e) => setEquipamentosSelecionados({ ...equipamentosSelecionados, [eq.id]: parseInt(e.target.value) || 0 })}
                           className="w-20" />
                         <Button onClick={() => {
                           const qtd = equipamentosSelecionados[eq.id] || 1
-                          if (eq.controle_quantidade && qtd > (eq.quantidade_disponivel || 0)) {
-                            showToast(`Maximo disponivel: ${eq.quantidade_disponivel}`, 'warning')
+                          const maxDisponivel = eq.controle_quantidade ? (eq.quantidade_disponivel || 0) : 1
+                          if (qtd > maxDisponivel) {
+                            showToast(`Maximo disponivel: ${maxDisponivel}`, 'warning')
                             return
                           }
                           if (qtd > 0) { adicionarEquipamento(eq, qtd); setEquipamentosSelecionados({ ...equipamentosSelecionados, [eq.id]: 0 }) }
