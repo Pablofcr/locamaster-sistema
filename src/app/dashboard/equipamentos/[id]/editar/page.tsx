@@ -285,6 +285,7 @@ export default function EditarEquipamentoPage() {
               .select('numero_ativo')
               .eq('subclasse_id', parseInt(form.subclasse_id))
               .neq('id', params.id)
+              .not('numero_ativo', 'is', null)
               .order('numero_ativo', { ascending: false })
               .limit(1)
 

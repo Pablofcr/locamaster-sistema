@@ -199,6 +199,7 @@ export default function NovoEquipamentoPage() {
             .from('equipamentos')
             .select('numero_ativo')
             .eq('subclasse_id', parseInt(form.subclasse_id))
+            .not('numero_ativo', 'is', null)
             .order('numero_ativo', { ascending: false })
             .limit(1)
 
