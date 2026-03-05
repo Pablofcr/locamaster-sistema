@@ -27,6 +27,11 @@ interface TipoTecnico {
   nome: string
 }
 
+interface Fornecedor {
+  id: number
+  nome: string
+}
+
 function maskMoeda(value: string) {
   const nums = value.replace(/\D/g, '')
   if (!nums) return ''
@@ -53,6 +58,7 @@ export default function NovoEquipamentoPage() {
   const [subclasses, setSubclasses] = useState<Subclasse[]>([])
   const [tipos, setTipos] = useState<TipoTecnico[]>([])
   const [subclassesFiltradas, setSubclassesFiltradas] = useState<Subclasse[]>([])
+  const [fornecedores, setFornecedores] = useState<Fornecedor[]>([])
   const [assetIdPreview, setAssetIdPreview] = useState('')
 
   const [form, setForm] = useState({
@@ -72,11 +78,15 @@ export default function NovoEquipamentoPage() {
     preco_mensal: '',
     observacoes: '',
     controle_quantidade: false,
-    quantidade_total: ''
+    quantidade_total: '',
+    data_aquisicao: '',
+    fornecedor_id: '',
+    numero_nota_fiscal: ''
   })
 
   useEffect(() => {
     carregarClassificacoes()
+    carregarFornecedores()
   }, [])
 
   useEffect(() => {
@@ -112,6 +122,15 @@ export default function NovoEquipamentoPage() {
       setTipos(tiposRes.data || [])
     } catch {
       console.error('Erro ao carregar classificacoes')
+    }
+  }
+
+  const carregarFornecedores = async () => {
+    try {
+      const { data } = await supabase.from('fornecedores').select('id, nome').order('nome')
+      setFornecedores(data || [])
+    } catch {
+      console.error('Erro ao carregar fornecedores')
     }
   }
 
@@ -216,7 +235,10 @@ export default function NovoEquipamentoPage() {
         observacoes: form.observacoes.trim() || null,
         controle_quantidade: form.controle_quantidade,
         quantidade_total: qtdTotal,
-        quantidade_disponivel: qtdTotal
+        quantidade_disponivel: qtdTotal,
+        data_aquisicao: form.data_aquisicao || null,
+        fornecedor_id: form.fornecedor_id ? parseInt(form.fornecedor_id) : null,
+        numero_nota_fiscal: form.numero_nota_fiscal.trim() || null
       })
 
       if (error) throw error
@@ -425,6 +447,48 @@ export default function NovoEquipamentoPage() {
                   <option value="manutencao">Em Manutencao</option>
                   <option value="inativo">Inativo</option>
                 </select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="mt-4">
+          <CardHeader>
+            <CardTitle>Aquisicao</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Data de Aquisicao</label>
+                <Input
+                  name="data_aquisicao"
+                  type="date"
+                  value={form.data_aquisicao}
+                  onChange={handleChange}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fornecedor</label>
+                <select
+                  name="fornecedor_id"
+                  value={form.fornecedor_id}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Selecione um fornecedor</option>
+                  {fornecedores.map(f => (
+                    <option key={f.id} value={f.id}>{f.nome}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">N. Nota Fiscal</label>
+                <Input
+                  name="numero_nota_fiscal"
+                  placeholder="Ex: NF-001234"
+                  value={form.numero_nota_fiscal}
+                  onChange={handleChange}
+                />
               </div>
             </div>
           </CardContent>

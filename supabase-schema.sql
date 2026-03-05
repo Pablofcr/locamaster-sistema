@@ -246,12 +246,17 @@ INSERT INTO equipment_types (codigo, nome, descricao) VALUES
   ('HBR', 'Híbrido', 'Motor híbrido')
 ON CONFLICT (codigo) DO NOTHING;
 
--- 11. COLUNAS DE CONTROLE POR QUANTIDADE (equipamentos quantificáveis)
+-- 11. COLUNAS DE AQUISIÇÃO (histórico do equipamento)
+ALTER TABLE equipamentos ADD COLUMN IF NOT EXISTS data_aquisicao DATE;
+ALTER TABLE equipamentos ADD COLUMN IF NOT EXISTS fornecedor_id BIGINT REFERENCES fornecedores(id);
+ALTER TABLE equipamentos ADD COLUMN IF NOT EXISTS numero_nota_fiscal TEXT;
+
+-- 13. COLUNAS DE CONTROLE POR QUANTIDADE (equipamentos quantificáveis)
 ALTER TABLE equipamentos ADD COLUMN IF NOT EXISTS controle_quantidade BOOLEAN DEFAULT false;
 ALTER TABLE equipamentos ADD COLUMN IF NOT EXISTS quantidade_total INTEGER DEFAULT 1;
 ALTER TABLE equipamentos ADD COLUMN IF NOT EXISTS quantidade_disponivel INTEGER DEFAULT 1;
 
--- 12. COLUNA DE QUANTIDADE NA LOCAÇÃO
+-- 14. COLUNA DE QUANTIDADE NA LOCAÇÃO
 ALTER TABLE locacoes ADD COLUMN IF NOT EXISTS quantidade INTEGER DEFAULT 1;
 
 -- HABILITAR RLS (Row Level Security) com políticas permissivas para desenvolvimento
