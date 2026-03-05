@@ -51,6 +51,7 @@ export default function EditarClientePage() {
   const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [consultando, setConsultando] = useState(false)
   const [form, setForm] = useState({
     nome: '',
     email: '',
@@ -105,6 +106,46 @@ export default function EditarClientePage() {
     else if (name === 'telefone') masked = maskTelefone(value)
     else if (name === 'cep') masked = maskCep(value)
     setForm({ ...form, [name]: masked })
+  }
+
+  const consultarCnpj = async () => {
+    const cnpjNumeros = form.cpf_cnpj.replace(/\D/g, '')
+    if (cnpjNumeros.length !== 14) {
+      showToast('Digite um CNPJ completo (14 digitos)', 'warning')
+      return
+    }
+
+    setConsultando(true)
+    try {
+      const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpjNumeros}`)
+      if (!res.ok) throw new Error('CNPJ nao encontrado')
+      const data = await res.json()
+
+      const endereco = [data.logradouro, data.numero, data.complemento, data.bairro]
+        .filter(Boolean)
+        .join(', ')
+
+      const telefone = data.ddd_telefone_1
+        ? data.ddd_telefone_1.replace(/\D/g, '')
+        : ''
+
+      setForm(prev => ({
+        ...prev,
+        nome: data.razao_social || prev.nome,
+        email: data.email || prev.email,
+        telefone: telefone ? maskTelefone(telefone) : prev.telefone,
+        endereco: endereco || prev.endereco,
+        cidade: data.municipio || prev.cidade,
+        estado: data.uf || prev.estado,
+        cep: data.cep ? maskCep(data.cep.replace(/\D/g, '')) : prev.cep
+      }))
+
+      showToast(`CNPJ encontrado: ${data.razao_social}`, 'success')
+    } catch {
+      showToast('CNPJ nao encontrado na Receita Federal', 'error')
+    } finally {
+      setConsultando(false)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -207,12 +248,26 @@ export default function EditarClientePage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">CPF/CNPJ</label>
-                <Input
-                  name="cpf_cnpj"
-                  placeholder="000.000.000-00 ou 00.000.000/0000-00"
-                  value={form.cpf_cnpj}
-                  onChange={handleChange}
-                />
+                <div className="flex space-x-2">
+                  <Input
+                    name="cpf_cnpj"
+                    placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                    value={form.cpf_cnpj}
+                    onChange={handleChange}
+                    className="flex-1"
+                  />
+                  {form.cpf_cnpj.replace(/\D/g, '').length >= 14 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={consultarCnpj}
+                      disabled={consultando}
+                      className="whitespace-nowrap"
+                    >
+                      {consultando ? 'Consultando...' : 'Consultar CNPJ'}
+                    </Button>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
