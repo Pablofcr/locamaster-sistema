@@ -81,7 +81,8 @@ export default function NovoEquipamentoPage() {
     quantidade_total: '',
     data_aquisicao: '',
     fornecedor_id: '',
-    numero_nota_fiscal: ''
+    numero_nota_fiscal: '',
+    valor_aquisicao_unitario: ''
   })
 
   useEffect(() => {
@@ -154,7 +155,7 @@ export default function NovoEquipamentoPage() {
     const { name, value } = e.target
     let masked = value
 
-    if (name === 'preco_unitario_dia' || name === 'preco_dia' || name === 'preco_mensal') {
+    if (name === 'preco_unitario_dia' || name === 'preco_dia' || name === 'preco_mensal' || name === 'valor_aquisicao_unitario') {
       masked = maskMoeda(value)
     }
 
@@ -238,7 +239,8 @@ export default function NovoEquipamentoPage() {
         quantidade_disponivel: qtdTotal,
         data_aquisicao: form.data_aquisicao || null,
         fornecedor_id: form.fornecedor_id ? parseInt(form.fornecedor_id) : null,
-        numero_nota_fiscal: form.numero_nota_fiscal.trim() || null
+        numero_nota_fiscal: form.numero_nota_fiscal.trim() || null,
+        valor_aquisicao_unitario: parseMoeda(form.valor_aquisicao_unitario)
       })
 
       if (error) throw error
@@ -457,13 +459,22 @@ export default function NovoEquipamentoPage() {
             <CardTitle>Aquisicao</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Data de Aquisicao</label>
                 <Input
                   name="data_aquisicao"
                   type="date"
                   value={form.data_aquisicao}
+                  onChange={handleChange}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Valor Unitario de Aquisicao</label>
+                <Input
+                  name="valor_aquisicao_unitario"
+                  placeholder="R$ 0,00"
+                  value={form.valor_aquisicao_unitario}
                   onChange={handleChange}
                 />
               </div>

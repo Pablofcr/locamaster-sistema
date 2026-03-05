@@ -250,6 +250,7 @@ ON CONFLICT (codigo) DO NOTHING;
 ALTER TABLE equipamentos ADD COLUMN IF NOT EXISTS data_aquisicao DATE;
 ALTER TABLE equipamentos ADD COLUMN IF NOT EXISTS fornecedor_id BIGINT REFERENCES fornecedores(id);
 ALTER TABLE equipamentos ADD COLUMN IF NOT EXISTS numero_nota_fiscal TEXT;
+ALTER TABLE equipamentos ADD COLUMN IF NOT EXISTS valor_aquisicao_unitario NUMERIC(10,2) DEFAULT 0;
 
 -- 13. COLUNAS DE CONTROLE POR QUANTIDADE (equipamentos quantificáveis)
 ALTER TABLE equipamentos ADD COLUMN IF NOT EXISTS controle_quantidade BOOLEAN DEFAULT false;
