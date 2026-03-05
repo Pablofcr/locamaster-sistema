@@ -398,7 +398,10 @@ export default function NovoOrcamentoPage() {
                           {eq.asset_id && <span className="font-mono text-blue-700 mr-2">[{eq.asset_id}]</span>}
                           {eq.nome}
                         </h4>
-                        <p className="text-sm text-gray-600">{eq.marca} {eq.modelo && `- ${eq.modelo}`} {eq.categoria && `- ${eq.categoria}`}</p>
+                        <p className="text-sm text-gray-600">
+                          {eq.marca} {eq.modelo && `- ${eq.modelo}`} {eq.categoria && `- ${eq.categoria}`}
+                          {eq.numero_patrimonio && <span className="ml-2 text-gray-500">| Pat: {eq.numero_patrimonio}</span>}
+                        </p>
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-medium text-green-600">{formatarMoeda(calcularPrecoModalidade(eq))}/{modalidadeLocacao}</p>
                           {eq.controle_quantidade && (
