@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/components/ui/Toast'
 import { supabase } from '@/lib/supabase'
+import { gerarPDFOrcamento } from '@/lib/gerarPDFOrcamento'
 import { useRouter, useParams } from 'next/navigation'
 
 interface Cliente {
@@ -404,6 +405,25 @@ export default function EditarOrcamentoPage() {
           </Card>
 
           <div className="space-y-3">
+            <Button onClick={() => gerarPDFOrcamento({
+              numero: numeroOrcamento || undefined,
+              clienteNome: clienteSelecionado?.nome || '',
+              clienteTelefone: clienteSelecionado?.telefone || '',
+              clienteEmail: clienteSelecionado?.email || '',
+              clienteDocumento: clienteSelecionado?.documento || '',
+              modalidade: modalidadeLocacao,
+              diasLocacao,
+              dataInicio: dataInicio || undefined,
+              dataFim: dataFim || undefined,
+              itens: itensOrcamento,
+              subtotal: totais.subtotal,
+              desconto: totais.desconto,
+              frete: totais.frete,
+              total: totais.total,
+              observacoes: observacoes || undefined,
+            })} variant="outline" className="w-full" disabled={!clienteId || itensOrcamento.length === 0}>
+              Visualizar PDF
+            </Button>
             <Button onClick={salvarOrcamento} className="w-full bg-green-600 hover:bg-green-700" disabled={!clienteId || itensOrcamento.length === 0 || saving}>
               {saving ? 'Salvando...' : 'Salvar Alteracoes'}
             </Button>
@@ -474,6 +494,7 @@ export default function EditarOrcamentoPage() {
           </div>
         </div>
       )}
+
     </div>
   )
 }
