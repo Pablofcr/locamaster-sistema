@@ -4,3 +4,6 @@ dist/
 .env.local
 package-lock.json
 *.log
+tsconfig.tsbuildinfo
+nul
+src/lib/*.txt

@@ -76,7 +76,7 @@ export default function RelatoriosPage() {
       doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 20, 45)
 
       if (periodoInicio && periodoFim) {
-        doc.text(`Período: ${new Date(periodoInicio).toLocaleDateString('pt-BR')} a ${new Date(periodoFim).toLocaleDateString('pt-BR')}`, 20, 55)
+        doc.text(`Período: ${new Date(periodoInicio + 'T12:00:00').toLocaleDateString('pt-BR')} a ${new Date(periodoFim + 'T12:00:00').toLocaleDateString('pt-BR')}`, 20, 55)
       }
 
       doc.setFontSize(14)

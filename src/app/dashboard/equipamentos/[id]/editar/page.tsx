@@ -94,7 +94,10 @@ export default function EditarEquipamentoPage() {
     data_aquisicao: '',
     fornecedor_id: '',
     numero_nota_fiscal: '',
-    valor_aquisicao_unitario: ''
+    valor_aquisicao_unitario: '',
+    forma_pagamento_aquisicao: '',
+    parcelas_aquisicao: '',
+    data_vencimento_primeira_parcela: ''
   })
 
   // Track original values for asset_id regeneration and quantity
@@ -190,7 +193,10 @@ export default function EditarEquipamentoPage() {
           data_aquisicao: data.data_aquisicao || '',
           fornecedor_id: data.fornecedor_id ? String(data.fornecedor_id) : '',
           numero_nota_fiscal: data.numero_nota_fiscal || '',
-          valor_aquisicao_unitario: formatarMoedaInicial(data.valor_aquisicao_unitario)
+          valor_aquisicao_unitario: formatarMoedaInicial(data.valor_aquisicao_unitario),
+          forma_pagamento_aquisicao: data.forma_pagamento_aquisicao || '',
+          parcelas_aquisicao: data.parcelas_aquisicao ? String(data.parcelas_aquisicao) : '',
+          data_vencimento_primeira_parcela: data.data_vencimento_primeira_parcela || ''
         })
 
         setOriginalClasseId(classeId)
@@ -335,7 +341,10 @@ export default function EditarEquipamentoPage() {
           data_aquisicao: form.data_aquisicao || null,
           fornecedor_id: form.fornecedor_id ? parseInt(form.fornecedor_id) : null,
           numero_nota_fiscal: form.numero_nota_fiscal.trim() || null,
-          valor_aquisicao_unitario: parseMoeda(form.valor_aquisicao_unitario)
+          valor_aquisicao_unitario: parseMoeda(form.valor_aquisicao_unitario),
+          forma_pagamento_aquisicao: form.forma_pagamento_aquisicao || null,
+          parcelas_aquisicao: form.parcelas_aquisicao ? parseInt(form.parcelas_aquisicao) : null,
+          data_vencimento_primeira_parcela: form.data_vencimento_primeira_parcela || null
         })
         .eq('id', params.id)
 
@@ -653,6 +662,79 @@ export default function EditarEquipamentoPage() {
                 />
               </div>
             </div>
+
+            {/* Forma de Pagamento da Aquisição */}
+            {form.valor_aquisicao_unitario && parseMoeda(form.valor_aquisicao_unitario) > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <h4 className="text-sm font-semibold text-gray-700 mb-3">Forma de Pagamento da Aquisicao</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Forma de Pagamento</label>
+                    <select
+                      name="forma_pagamento_aquisicao"
+                      value={form.forma_pagamento_aquisicao}
+                      onChange={handleChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">Selecione</option>
+                      <option value="a_vista">Pagamento A Vista</option>
+                      <option value="parcelado">Parcelado</option>
+                    </select>
+                  </div>
+                  {form.forma_pagamento_aquisicao === 'parcelado' && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Quantidade de Parcelas</label>
+                        <Input
+                          name="parcelas_aquisicao"
+                          type="number"
+                          min="2"
+                          max="120"
+                          placeholder="Ex: 12"
+                          value={form.parcelas_aquisicao}
+                          onChange={handleChange}
+                        />
+                        {form.parcelas_aquisicao && parseInt(form.parcelas_aquisicao) >= 2 && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            {parseInt(form.parcelas_aquisicao)}x de {maskMoeda(String(Math.round((parseMoeda(form.valor_aquisicao_unitario) / parseInt(form.parcelas_aquisicao)) * 100)))}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Vencimento 1a Parcela</label>
+                        <Input
+                          name="data_vencimento_primeira_parcela"
+                          type="date"
+                          value={form.data_vencimento_primeira_parcela}
+                          onChange={handleChange}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Demais parcelas no mesmo dia dos meses seguintes</p>
+                      </div>
+                    </>
+                  )}
+                  {form.forma_pagamento_aquisicao === 'a_vista' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Data do Pagamento</label>
+                      <Input
+                        name="data_vencimento_primeira_parcela"
+                        type="date"
+                        value={form.data_vencimento_primeira_parcela}
+                        onChange={handleChange}
+                      />
+                    </div>
+                  )}
+                </div>
+                {form.forma_pagamento_aquisicao && (
+                  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-xs text-blue-700">
+                      {form.forma_pagamento_aquisicao === 'a_vista'
+                        ? 'Lancamento unico sera gerado em Contas a Pagar ao salvar.'
+                        : `${form.parcelas_aquisicao || '...'} parcelas serao lancadas em Contas a Pagar ao salvar.`}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 

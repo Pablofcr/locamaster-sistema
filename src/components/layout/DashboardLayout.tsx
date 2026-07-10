@@ -1,8 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { ReactNode } from "react"
+import { usePathname, useRouter } from "next/navigation"
+import { ReactNode, useEffect } from "react"
+import { useEmpresa } from "@/contexts/EmpresaContext"
 
 interface DashboardLayoutProps {
   children: ReactNode
@@ -10,22 +11,46 @@ interface DashboardLayoutProps {
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: '🏠' },
-  { name: 'Calendário', href: '/dashboard/calendario', icon: '📅' },
-  { name: 'Orçamentos', href: '/dashboard/orcamentos', icon: '📋', badge: 'NEW' },
-  { name: 'Equipamentos', href: '/dashboard/equipamentos', icon: '📦' },
-  { name: 'Classificação', href: '/dashboard/equipamentos/classificacao', icon: '🏷️' },
-  { name: 'Manutenção', href: '/dashboard/manutencao', icon: '🔧' },
-  { name: 'Clientes', href: '/dashboard/clientes', icon: '👥' },
+  { name: 'Calendario', href: '/dashboard/calendario', icon: '📅' },
   { name: 'Fornecedores', href: '/dashboard/fornecedores', icon: '🏭' },
-  { name: 'Locações', href: '/dashboard/locacoes', icon: '📄' },
+  { name: 'Clientes', href: '/dashboard/clientes', icon: '👥' },
+  { name: 'Equipamentos', href: '/dashboard/equipamentos', icon: '📦' },
+  { name: 'Classificacao', href: '/dashboard/equipamentos/classificacao', icon: '🏷️' },
+  { name: 'Orcamentos', href: '/dashboard/orcamentos', icon: '📋', badge: 'NEW' },
+  { name: 'Locacoes', href: '/dashboard/locacoes', icon: '📄' },
   { name: 'Faturamento', href: '/dashboard/faturamento', icon: '💰' },
-  { name: 'Relatórios', href: '/dashboard/relatorios', icon: '📊' },
+  { name: 'Contas a Receber', href: '/dashboard/recebimentos', icon: '💳' },
+  { name: 'Contas a Pagar', href: '/dashboard/contas-pagar', icon: '📤' },
+  { name: 'Manutencao', href: '/dashboard/manutencao', icon: '🔧' },
+  { name: 'Relatorios', href: '/dashboard/relatorios', icon: '📊' },
   { name: 'Premium', href: '/dashboard/premium', icon: '⭐', badge: 'HOT' },
-  { name: 'Configurações', href: '/dashboard/configuracoes', icon: '⚙️' },
+  { name: 'Configuracoes', href: '/dashboard/configuracoes', icon: '⚙️' },
 ]
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname()
+  const router = useRouter()
+  const { empresa, loading, empresaConfigurada } = useEmpresa()
+
+  useEffect(() => {
+    if (!loading && !empresaConfigurada && pathname !== '/dashboard/configuracoes/empresa') {
+      router.push('/dashboard/configuracoes/empresa')
+    }
+  }, [loading, empresaConfigurada, pathname, router])
+
+  if (loading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Carregando...</p>
+        </div>
+      </div>
+    )
+  }
+
+  const nomeExibicao = empresa?.nome_fantasia || empresa?.razao_social || 'LocaMaster'
+  const sigla = nomeExibicao.substring(0, 2).toUpperCase()
 
   return (
     <div className="h-screen flex overflow-hidden bg-gray-50">
@@ -34,17 +59,25 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         {/* Logo */}
         <div className="flex items-center justify-center h-16 px-4 bg-gradient-to-r from-blue-600 to-blue-500 flex-shrink-0">
           <div className="flex items-center space-x-2">
-            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-              <span className="text-blue-600 font-bold text-lg">LM</span>
-            </div>
-            <div className="text-white">
-              <h1 className="text-lg font-bold">LocaMaster</h1>
-              <p className="text-xs text-blue-100">Sistema de Gestão</p>
+            {empresa?.logo_base64 ? (
+              <img
+                src={empresa.logo_base64}
+                alt="Logo"
+                className="w-10 h-10 rounded-lg object-contain bg-white p-0.5"
+              />
+            ) : (
+              <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
+                <span className="text-blue-600 font-bold text-lg">{sigla}</span>
+              </div>
+            )}
+            <div className="text-white min-w-0">
+              <h1 className="text-lg font-bold truncate">{nomeExibicao}</h1>
+              <p className="text-xs text-blue-100">Sistema de Gestao</p>
             </div>
           </div>
         </div>
 
-        {/* Navigation - Área Scrollável */}
+        {/* Navigation - Area Scrollavel */}
         <div className="flex-1 overflow-y-auto">
           <nav className="mt-4 px-2">
             <div className="space-y-1">
@@ -86,11 +119,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <h3 className="text-sm font-medium text-blue-800 mb-3">📊 Status Sistema</h3>
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="text-blue-700">Orçamentos:</span>
+                <span className="text-blue-700">Orcamentos:</span>
                 <span className="font-medium text-blue-800">5</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-blue-700">Locações:</span>
+                <span className="text-blue-700">Locacoes:</span>
                 <span className="font-medium text-blue-800">18</span>
               </div>
               <div className="flex justify-between text-sm">
@@ -102,17 +135,17 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
           {/* Info Box */}
           <div className="mt-4 mx-4 p-3 bg-gray-50 rounded-lg border mb-4">
-            <h3 className="text-xs font-medium text-gray-600 mb-2">🎯 LocaMaster</h3>
+            <h3 className="text-xs font-medium text-gray-600 mb-2">🎯 {nomeExibicao}</h3>
             <div className="space-y-1 text-xs text-gray-500">
               <div>Sistema SaaS</div>
-              <div>Múltiplas Empresas</div>
-              <div>Gestão Completa</div>
+              <div>Multiplas Empresas</div>
+              <div>Gestao Completa</div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Conteúdo Principal - Com margem para sidebar */}
+      {/* Conteudo Principal - Com margem para sidebar */}
       <div className="flex-1 ml-64 flex flex-col h-full">
         {/* Header Fixo */}
         <header className="bg-white shadow-sm border-b border-gray-200 flex-shrink-0">
@@ -136,19 +169,27 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 </button>
                 <div className="flex items-center space-x-3">
                   <div className="text-right">
-                    <p className="text-sm font-medium text-gray-900">LocaMaster</p>
+                    <p className="text-sm font-medium text-gray-900">{nomeExibicao}</p>
                     <p className="text-xs text-gray-500">Administrador</p>
                   </div>
-                  <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
-                    <span className="text-white text-sm font-medium">L</span>
-                  </div>
+                  {empresa?.logo_base64 ? (
+                    <img
+                      src={empresa.logo_base64}
+                      alt="Logo"
+                      className="w-8 h-8 rounded-full object-contain bg-gray-100 p-0.5"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
+                      <span className="text-white text-sm font-medium">{sigla.charAt(0)}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           </div>
         </header>
 
-        {/* Conteúdo Scrollável */}
+        {/* Conteudo Scrollavel */}
         <main className="flex-1 overflow-y-auto">
           <div className="p-6">
             {children}

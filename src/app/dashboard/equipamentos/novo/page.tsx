@@ -82,7 +82,10 @@ export default function NovoEquipamentoPage() {
     data_aquisicao: '',
     fornecedor_id: '',
     numero_nota_fiscal: '',
-    valor_aquisicao_unitario: ''
+    valor_aquisicao_unitario: '',
+    forma_pagamento_aquisicao: '',
+    parcelas_aquisicao: '',
+    data_vencimento_primeira_parcela: ''
   })
 
   useEffect(() => {
@@ -241,10 +244,64 @@ export default function NovoEquipamentoPage() {
         data_aquisicao: form.data_aquisicao || null,
         fornecedor_id: form.fornecedor_id ? parseInt(form.fornecedor_id) : null,
         numero_nota_fiscal: form.numero_nota_fiscal.trim() || null,
-        valor_aquisicao_unitario: parseMoeda(form.valor_aquisicao_unitario)
+        valor_aquisicao_unitario: parseMoeda(form.valor_aquisicao_unitario),
+        forma_pagamento_aquisicao: form.forma_pagamento_aquisicao || null,
+        parcelas_aquisicao: form.parcelas_aquisicao ? parseInt(form.parcelas_aquisicao) : null,
+        data_vencimento_primeira_parcela: form.data_vencimento_primeira_parcela || null
       })
 
       if (error) throw error
+
+      // Gerar lancamentos em Contas a Pagar
+      const valorAquisicao = parseMoeda(form.valor_aquisicao_unitario)
+      if (valorAquisicao > 0 && form.forma_pagamento_aquisicao && form.data_vencimento_primeira_parcela) {
+        const fornecedor = fornecedores.find(f => f.id === parseInt(form.fornecedor_id))
+        const nomeEquip = form.nome.trim()
+
+        if (form.forma_pagamento_aquisicao === 'a_vista') {
+          await supabase.from('contas_pagar').insert({
+            descricao: `Aquisicao: ${nomeEquip}`,
+            categoria: 'equipamento',
+            fornecedor_id: form.fornecedor_id ? parseInt(form.fornecedor_id) : null,
+            fornecedor_nome: fornecedor?.nome || null,
+            valor: valorAquisicao,
+            data_emissao: form.data_aquisicao || new Date().toISOString().split('T')[0],
+            data_vencimento: form.data_vencimento_primeira_parcela,
+            numero_nota_fiscal: form.numero_nota_fiscal.trim() || null,
+            parcela_numero: 1,
+            parcela_total: 1,
+            status: 'pendente',
+          })
+        } else if (form.forma_pagamento_aquisicao === 'parcelado') {
+          const numParcelas = Math.max(2, parseInt(form.parcelas_aquisicao) || 2)
+          const valorParcela = Math.round((valorAquisicao / numParcelas) * 100) / 100
+          const contasInserir = []
+          const dataBase = new Date(form.data_vencimento_primeira_parcela + 'T12:00:00')
+
+          for (let i = 0; i < numParcelas; i++) {
+            const dataVenc = new Date(dataBase)
+            dataVenc.setMonth(dataVenc.getMonth() + i)
+
+            contasInserir.push({
+              descricao: `Aquisicao: ${nomeEquip} (${i + 1}/${numParcelas})`,
+              categoria: 'equipamento',
+              fornecedor_id: form.fornecedor_id ? parseInt(form.fornecedor_id) : null,
+              fornecedor_nome: fornecedor?.nome || null,
+              valor: i === numParcelas - 1
+                ? Math.round((valorAquisicao - valorParcela * (numParcelas - 1)) * 100) / 100
+                : valorParcela,
+              data_emissao: form.data_aquisicao || new Date().toISOString().split('T')[0],
+              data_vencimento: dataVenc.toISOString().split('T')[0],
+              numero_nota_fiscal: form.numero_nota_fiscal.trim() || null,
+              parcela_numero: i + 1,
+              parcela_total: numParcelas,
+              status: 'pendente',
+            })
+          }
+
+          await supabase.from('contas_pagar').insert(contasInserir)
+        }
+      }
 
       showToast('Equipamento cadastrado com sucesso!', 'success')
       router.push('/dashboard/equipamentos')
@@ -503,6 +560,77 @@ export default function NovoEquipamentoPage() {
                 />
               </div>
             </div>
+
+            {/* Forma de Pagamento da Aquisição */}
+            {form.valor_aquisicao_unitario && parseMoeda(form.valor_aquisicao_unitario) > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <h4 className="text-sm font-semibold text-gray-700 mb-3">Forma de Pagamento da Aquisicao</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Forma de Pagamento</label>
+                    <select
+                      name="forma_pagamento_aquisicao"
+                      value={form.forma_pagamento_aquisicao}
+                      onChange={handleChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">Selecione</option>
+                      <option value="a_vista">Pagamento A Vista</option>
+                      <option value="parcelado">Parcelado</option>
+                    </select>
+                  </div>
+                  {form.forma_pagamento_aquisicao === 'parcelado' && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Quantidade de Parcelas</label>
+                        <Input
+                          name="parcelas_aquisicao"
+                          type="number"
+                          min="2"
+                          max="120"
+                          placeholder="Ex: 12"
+                          value={form.parcelas_aquisicao}
+                          onChange={handleChange}
+                        />
+                        {form.parcelas_aquisicao && parseInt(form.parcelas_aquisicao) >= 2 && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            {parseInt(form.parcelas_aquisicao)}x de {maskMoeda(String(Math.round((parseMoeda(form.valor_aquisicao_unitario) / parseInt(form.parcelas_aquisicao)) * 100)))}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Vencimento 1a Parcela</label>
+                        <Input
+                          name="data_vencimento_primeira_parcela"
+                          type="date"
+                          value={form.data_vencimento_primeira_parcela}
+                          onChange={handleChange}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Demais parcelas no mesmo dia dos meses seguintes</p>
+                      </div>
+                    </>
+                  )}
+                  {form.forma_pagamento_aquisicao === 'a_vista' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Data do Pagamento</label>
+                      <Input
+                        name="data_vencimento_primeira_parcela"
+                        type="date"
+                        value={form.data_vencimento_primeira_parcela}
+                        onChange={handleChange}
+                      />
+                    </div>
+                  )}
+                </div>
+                {form.forma_pagamento_aquisicao && (
+                  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-xs text-blue-700">
+                      Ao salvar, {form.forma_pagamento_aquisicao === 'a_vista' ? '1 lancamento' : `${form.parcelas_aquisicao || '...'} parcelas serao lancadas`} automaticamente em Contas a Pagar para controle financeiro.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 

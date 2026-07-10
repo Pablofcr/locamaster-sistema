@@ -7,11 +7,15 @@ import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/components/ui/Toast'
 import { supabase } from '@/lib/supabase'
+import { gerarContratoLocacao } from '@/lib/gerarContratoLocacao'
+import { criarLocacaoDoOrcamento } from '@/lib/verificarDisponibilidade'
+import { useEmpresa } from '@/contexts/EmpresaContext'
 import { useRouter } from 'next/navigation'
 
 export default function OrcamentosPage() {
   const router = useRouter()
   const { showToast } = useToast()
+  const { empresa } = useEmpresa()
   const [orcamentos, setOrcamentos] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -84,6 +88,19 @@ export default function OrcamentosPage() {
 
   const atualizarStatus = async (id: number, novoStatus: string) => {
     try {
+      // Se for aprovacao, validar disponibilidade e criar locacao ANTES de atualizar status
+      if (novoStatus === 'aprovado') {
+        const { data: orc } = await supabase.from('orcamentos').select('*').eq('id', id).single()
+        if (!orc) { showToast('Orcamento nao encontrado', 'error'); return }
+
+        // Criar locacao automaticamente (inclui validacao de disponibilidade)
+        const resultado = await criarLocacaoDoOrcamento(orc)
+        if (!resultado.success) {
+          showToast(resultado.error || 'Erro ao criar locacao', 'error')
+          return
+        }
+      }
+
       const { error } = await supabase
         .from('orcamentos')
         .update({ status: novoStatus, updated_at: new Date().toISOString() })
@@ -91,12 +108,63 @@ export default function OrcamentosPage() {
 
       if (error) throw error
 
-      showToast(`Orçamento ${novoStatus} com sucesso!`, 'success')
+      showToast(`Orcamento ${novoStatus} com sucesso!`, 'success')
       carregarOrcamentos()
       carregarStats()
+
+      if (novoStatus === 'aprovado') {
+        showToast('Locacao criada automaticamente!', 'success')
+        try {
+          const { data: orc } = await supabase.from('orcamentos').select('*').eq('id', id).single()
+          if (orc) {
+            const { data: cliente } = await supabase.from('clientes').select('*').eq('id', orc.cliente_id).single()
+            let itens: any[] = []
+            try { itens = typeof orc.itens === 'string' ? JSON.parse(orc.itens) : (orc.itens || []) } catch { itens = [] }
+
+            const empresaEndereco = empresa
+              ? [empresa.logradouro, empresa.numero, empresa.complemento, empresa.bairro, empresa.cidade, empresa.estado, empresa.cep].filter(Boolean).join(', ')
+              : ''
+            const clienteEndereco = cliente
+              ? [cliente.logradouro, cliente.numero, cliente.complemento, cliente.bairro, cliente.cidade, cliente.estado, cliente.cep].filter(Boolean).join(', ')
+              : ''
+
+            gerarContratoLocacao({
+              numeroOrcamento: orc.numero_orcamento || `#${orc.id}`,
+              empresaNome: empresa?.nome_fantasia || empresa?.razao_social || '',
+              empresaRazaoSocial: empresa?.razao_social || '',
+              empresaCnpj: empresa?.cnpj || '',
+              empresaEndereco,
+              empresaEmail: empresa?.email || '',
+              empresaTelefone: empresa?.telefone || '',
+              empresaLogo: empresa?.logo_base64 || undefined,
+              clienteNome: cliente?.nome || orc.cliente_nome || '',
+              clienteNomeFantasia: cliente?.nome_fantasia || '',
+              clienteDocumento: cliente?.cpf_cnpj || cliente?.documento || '',
+              clienteEndereco,
+              clienteEmail: cliente?.email || orc.cliente_email || '',
+              clienteTelefone: cliente?.telefone || orc.cliente_telefone || '',
+              localObra: orc.local_obra || '',
+              modalidade: orc.modalidade_locacao || 'mensal',
+              diasLocacao: orc.dias_locacao || 30,
+              dataInicio: orc.data_inicio_locacao || undefined,
+              dataFim: orc.data_fim_locacao || undefined,
+              itens,
+              subtotal: Number(orc.subtotal) || 0,
+              desconto: Number(orc.desconto_valor) || 0,
+              frete: Number(orc.valor_frete) || 0,
+              total: Number(orc.valor_total) || 0,
+              formaPagamento: orc.forma_pagamento || 'pix',
+              condicaoPagamento: orc.condicao_pagamento || '50_ato_30',
+              prazoNaoDevolucaoDias: 15,
+            })
+          }
+        } catch (err) {
+          console.error('Erro ao gerar contrato PDF:', err)
+        }
+      }
     } catch (error) {
       console.error('Erro ao atualizar status:', error)
-      showToast('Erro ao atualizar status do orçamento', 'error')
+      showToast('Erro ao atualizar status do orcamento', 'error')
     }
   }
 
@@ -253,7 +321,7 @@ export default function OrcamentosPage() {
                         <div><span className="font-medium">Cliente:</span> {orc.cliente_nome}</div>
                         <div className="flex items-center gap-4">
                           <span><span className="font-medium">Valor:</span> <span className="text-green-600 font-semibold">{formatarMoeda(Number(orc.valor_total) || 0)}</span></span>
-                          <span><span className="font-medium">Data:</span> {orc.data_orcamento ? new Date(orc.data_orcamento).toLocaleDateString('pt-BR') : new Date(orc.created_at).toLocaleDateString('pt-BR')}</span>
+                          <span><span className="font-medium">Data:</span> {orc.data_orcamento ? new Date(orc.data_orcamento + 'T12:00:00').toLocaleDateString('pt-BR') : new Date(orc.created_at).toLocaleDateString('pt-BR')}</span>
                           {orc.modalidade_locacao && <span><span className="font-medium">Modalidade:</span> {orc.modalidade_locacao}</span>}
                         </div>
                       </div>

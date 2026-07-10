@@ -204,10 +204,11 @@ export default function ManutencaoPage() {
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600 mb-4">
-                      <div><span className="font-medium">Agendada:</span><div>{m.data_agendada ? new Date(m.data_agendada).toLocaleDateString('pt-BR') : '-'}</div></div>
+                      <div><span className="font-medium">Agendada:</span><div>{m.data_agendada ? new Date(m.data_agendada + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}</div></div>
+                      {m.status === 'concluida' && m.data_realizada && <div><span className="font-medium">Concluida:</span><div className="text-green-700 font-medium">{new Date(m.data_realizada + 'T12:00:00').toLocaleDateString('pt-BR')}</div></div>}
                       <div><span className="font-medium">Custo:</span><div className="text-green-600 font-medium">{formatarMoeda(Number(m.custo) || 0)}</div></div>
-                      {m.proxima_manutencao && <div><span className="font-medium">Próxima:</span><div>{new Date(m.proxima_manutencao).toLocaleDateString('pt-BR')}</div></div>}
-                      {m.descricao && <div><span className="font-medium">Descrição:</span><div className="text-xs">{m.descricao}</div></div>}
+                      {m.proxima_manutencao && <div><span className="font-medium">Proxima:</span><div>{new Date(m.proxima_manutencao + 'T12:00:00').toLocaleDateString('pt-BR')}</div></div>}
+                      {m.descricao && <div><span className="font-medium">Descricao:</span><div className="text-xs">{m.descricao}</div></div>}
                     </div>
 
                     {m.observacoes && (
@@ -269,24 +270,62 @@ export default function ManutencaoPage() {
           <CardHeader><CardTitle>Agendar Nova Manutenção</CardTitle></CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <select value={formData.equipamento_id} onChange={(e) => setFormData({ ...formData, equipamento_id: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-md">
-                <option value="">Selecionar Equipamento</option>
-                {equipamentos.map(e => <option key={e.id} value={e.id}>{e.asset_id ? `[${e.asset_id}] ` : ''}{e.nome} {e.numero_patrimonio ? `(${e.numero_patrimonio})` : ''}</option>)}
-              </select>
-              <select value={formData.tipo} onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
-                className="px-3 py-2 border border-gray-300 rounded-md">
-                <option value="preventiva">Preventiva</option>
-                <option value="corretiva">Corretiva</option>
-              </select>
-              <Input placeholder="Data Agendada" type="date" value={formData.data_agendada} onChange={(e) => setFormData({ ...formData, data_agendada: e.target.value })} />
-              <Input placeholder="Técnico Responsável" value={formData.tecnico} onChange={(e) => setFormData({ ...formData, tecnico: e.target.value })} />
-              <Input placeholder="Custo Estimado (R$)" type="number" value={formData.custo} onChange={(e) => setFormData({ ...formData, custo: e.target.value })} />
-              <Input placeholder="Próxima Manutenção" type="date" value={formData.proxima_manutencao} onChange={(e) => setFormData({ ...formData, proxima_manutencao: e.target.value })} />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Equipamento *</label>
+                <select value={formData.equipamento_id} onChange={(e) => setFormData({ ...formData, equipamento_id: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                  <option value="">Selecionar Equipamento</option>
+                  {equipamentos.map(e => <option key={e.id} value={e.id}>{e.asset_id ? `[${e.asset_id}] ` : ''}{e.nome} {e.numero_patrimonio ? `(${e.numero_patrimonio})` : ''}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Manutencao *</label>
+                <select value={formData.tipo} onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                  <option value="preventiva">Preventiva</option>
+                  <option value="corretiva">Corretiva</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Data Agendada *</label>
+                <p className="text-xs text-gray-500 mb-1">Quando a manutencao deve ser realizada</p>
+                <Input type="date" value={formData.data_agendada} onChange={(e) => setFormData({ ...formData, data_agendada: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tecnico Responsavel</label>
+                <Input placeholder="Nome do tecnico" value={formData.tecnico} onChange={(e) => setFormData({ ...formData, tecnico: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Custo Estimado (R$)</label>
+                <Input placeholder="0,00" type="number" step="0.01" value={formData.custo} onChange={(e) => setFormData({ ...formData, custo: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Proxima Manutencao</label>
+                <p className="text-xs text-gray-500 mb-1">Data prevista para a proxima revisao</p>
+                <Input type="date" value={formData.proxima_manutencao} onChange={(e) => setFormData({ ...formData, proxima_manutencao: e.target.value })} />
+              </div>
             </div>
-            <div className="mt-4 space-y-3">
-              <Input placeholder="Descrição dos serviços..." value={formData.descricao} onChange={(e) => setFormData({ ...formData, descricao: e.target.value })} />
-              <Input placeholder="Observações especiais..." value={formData.observacoes} onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })} />
+            <div className="mt-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Descricao dos Servicos</label>
+                <textarea
+                  placeholder="Detalhe os servicos que serao realizados..."
+                  value={formData.descricao}
+                  onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Observacoes</label>
+                <textarea
+                  placeholder="Informacoes adicionais, pecas necessarias, cuidados especiais..."
+                  value={formData.observacoes}
+                  onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
+                  rows={2}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
             </div>
             <div className="mt-6 flex space-x-3">
               <Button onClick={agendarManutencao}>Agendar Manutenção</Button>

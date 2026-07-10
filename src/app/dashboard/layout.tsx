@@ -2,6 +2,7 @@
 
 import DashboardLayout from '@/components/layout/DashboardLayout'
 import { ToastProvider } from '@/components/ui/Toast'
+import { EmpresaProvider } from '@/contexts/EmpresaContext'
 
 export default function Layout({
   children,
@@ -10,9 +11,11 @@ export default function Layout({
 }) {
   return (
     <ToastProvider>
-      <DashboardLayout>
-        {children}
-      </DashboardLayout>
+      <EmpresaProvider>
+        <DashboardLayout>
+          {children}
+        </DashboardLayout>
+      </EmpresaProvider>
     </ToastProvider>
   )
 }

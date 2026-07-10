@@ -39,8 +39,15 @@ export default function EquipamentosPage() {
     disponivel: 0,
     locado: 0,
     manutencao: 0,
-    inativo: 0
+    inativo: 0,
+    baixado: 0
   })
+
+  // Historico modal states
+  const [historicoModal, setHistoricoModal] = useState(false)
+  const [historicoEquipamento, setHistoricoEquipamento] = useState<any>(null)
+  const [historicoData, setHistoricoData] = useState<{ locacoes: any[], manutencoes: any[] }>({ locacoes: [], manutencoes: [] })
+  const [historicoLoading, setHistoricoLoading] = useState(false)
 
   const ITEMS_PER_PAGE = 20
 
@@ -86,6 +93,7 @@ export default function EquipamentosPage() {
         disponivel: 0,
         locado: 0,
         manutencao: 0,
+        baixado: 0,
         inativo: 0
       }
 
@@ -161,6 +169,7 @@ export default function EquipamentosPage() {
       disponivel: { label: 'Disponivel', color: 'bg-green-100 text-green-800' },
       locado: { label: 'Locado', color: 'bg-blue-100 text-blue-800' },
       manutencao: { label: 'Manutencao', color: 'bg-yellow-100 text-yellow-800' },
+      baixado: { label: 'Baixado', color: 'bg-red-200 text-red-900' },
       inativo: { label: 'Inativo', color: 'bg-red-100 text-red-800' }
     }
 
@@ -207,6 +216,83 @@ export default function EquipamentosPage() {
     setCurrentPage(1)
   }
 
+  const abrirHistorico = async (equipamento: any) => {
+    setHistoricoEquipamento(equipamento)
+    setHistoricoModal(true)
+    setHistoricoLoading(true)
+    setHistoricoData({ locacoes: [], manutencoes: [] })
+
+    try {
+      const [locDiretasRes, locComItensRes, manutencoesRes] = await Promise.all([
+        supabase
+          .from('locacoes')
+          .select('id, numero, cliente_nome, data_inicio, data_fim, status, valor_total, itens, equipamento_id')
+          .eq('equipamento_id', equipamento.id)
+          .order('data_inicio', { ascending: false }),
+        supabase
+          .from('locacoes')
+          .select('id, numero, cliente_nome, data_inicio, data_fim, status, valor_total, itens, equipamento_id')
+          .not('itens', 'is', null)
+          .neq('equipamento_id', equipamento.id)
+          .order('data_inicio', { ascending: false }),
+        supabase
+          .from('manutencoes')
+          .select('id, tipo, status, data_agendada, data_realizada, tecnico, descricao, custo')
+          .eq('equipamento_id', equipamento.id)
+          .order('data_agendada', { ascending: false })
+      ])
+
+      const locDiretas = locDiretasRes.data || []
+      const locDeItens = (locComItensRes.data || []).filter(loc => {
+        try {
+          const itens = typeof loc.itens === 'string' ? JSON.parse(loc.itens) : loc.itens
+          return Array.isArray(itens) && itens.some((i: any) => i.equipamento_id === equipamento.id)
+        } catch { return false }
+      })
+
+      const todasLocacoes = [...locDiretas, ...locDeItens].sort((a, b) =>
+        new Date(b.data_inicio || '').getTime() - new Date(a.data_inicio || '').getTime()
+      )
+
+      setHistoricoData({
+        locacoes: todasLocacoes,
+        manutencoes: manutencoesRes.data || []
+      })
+    } catch (error) {
+      console.error('Erro ao carregar historico:', error)
+    } finally {
+      setHistoricoLoading(false)
+    }
+  }
+
+  const formatarData = (data: string | null) => {
+    if (!data) return '-'
+    return new Date(data + 'T00:00:00').toLocaleDateString('pt-BR')
+  }
+
+  const getLocacaoStatusBadge = (status: string) => {
+    const configs: Record<string, { label: string, variant: string }> = {
+      ativo: { label: 'Ativo', variant: 'success' },
+      pendente: { label: 'Pendente', variant: 'warning' },
+      finalizado: { label: 'Finalizado', variant: 'default' },
+      vencido: { label: 'Vencido', variant: 'danger' },
+      cancelado: { label: 'Cancelado', variant: 'danger' }
+    }
+    const config = configs[status] || { label: status, variant: 'default' }
+    return <Badge variant={config.variant as any}>{config.label}</Badge>
+  }
+
+  const getManutencaoStatusBadge = (status: string) => {
+    const configs: Record<string, { label: string, variant: string }> = {
+      concluida: { label: 'Concluida', variant: 'success' },
+      agendada: { label: 'Agendada', variant: 'primary' },
+      em_andamento: { label: 'Em andamento', variant: 'warning' },
+      vencida: { label: 'Vencida', variant: 'danger' }
+    }
+    const config = configs[status] || { label: status, variant: 'default' }
+    return <Badge variant={config.variant as any}>{config.label}</Badge>
+  }
+
   if (loading && currentPage === 1) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -238,7 +324,7 @@ export default function EquipamentosPage() {
       </div>
 
       {/* Estatisticas Rapidas */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <Card className="text-center">
           <CardContent className="p-4">
             <div className="text-2xl font-bold text-green-600">{formatarNumero(stats.disponivel)}</div>
@@ -255,6 +341,12 @@ export default function EquipamentosPage() {
           <CardContent className="p-4">
             <div className="text-2xl font-bold text-yellow-600">{formatarNumero(stats.manutencao)}</div>
             <div className="text-sm text-gray-600">Manutencao</div>
+          </CardContent>
+        </Card>
+        <Card className="text-center">
+          <CardContent className="p-4">
+            <div className="text-2xl font-bold text-red-700">{formatarNumero(stats.baixado)}</div>
+            <div className="text-sm text-gray-600">Baixados</div>
           </CardContent>
         </Card>
         <Card className="text-center">
@@ -290,6 +382,7 @@ export default function EquipamentosPage() {
                 <option value="disponivel">Disponivel</option>
                 <option value="locado">Locado</option>
                 <option value="manutencao">Manutencao</option>
+                <option value="baixado">Baixado (Perda Total)</option>
                 <option value="inativo">Inativo</option>
               </select>
             </div>
@@ -423,6 +516,10 @@ export default function EquipamentosPage() {
                         Editar
                       </Button>
 
+                      <Button variant="outline" size="sm" onClick={() => abrirHistorico(equipamento)}>
+                        Historico
+                      </Button>
+
                       <Button
                         size="sm"
                         disabled={equipamento.controle_quantidade
@@ -495,6 +592,119 @@ export default function EquipamentosPage() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Modal Historico */}
+      {historicoModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={() => setHistoricoModal(false)}>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Historico de Movimentacoes</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  {historicoEquipamento?.nome}
+                  {historicoEquipamento?.asset_id && (
+                    <span className="ml-2 font-mono text-blue-700 bg-blue-50 px-2 py-0.5 rounded text-xs">
+                      {historicoEquipamento.asset_id}
+                    </span>
+                  )}
+                </p>
+              </div>
+              <button
+                onClick={() => setHistoricoModal(false)}
+                className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {historicoLoading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent mx-auto mb-2"></div>
+                  <p className="text-gray-600">Carregando historico...</p>
+                </div>
+              ) : (
+                <>
+                  {/* Locacoes */}
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                      Locacoes ({historicoData.locacoes.length})
+                    </h3>
+                    {historicoData.locacoes.length === 0 ? (
+                      <p className="text-gray-500 text-sm py-3">Nenhuma locacao registrada para este equipamento.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {historicoData.locacoes.map(loc => (
+                          <div key={loc.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-gray-900">{loc.numero || `LOC-${loc.id}`}</span>
+                                <span className="text-gray-600">|</span>
+                                <span className="text-gray-700">{loc.cliente_nome || 'Cliente nao informado'}</span>
+                              </div>
+                              {getLocacaoStatusBadge(loc.status)}
+                            </div>
+                            <div className="flex items-center justify-between text-sm text-gray-600">
+                              <span>{formatarData(loc.data_inicio)} a {formatarData(loc.data_fim)}</span>
+                              <span className="font-semibold text-green-700">{formatarMoeda(loc.valor_total)}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Manutencoes */}
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                      Manutencoes ({historicoData.manutencoes.length})
+                    </h3>
+                    {historicoData.manutencoes.length === 0 ? (
+                      <p className="text-gray-500 text-sm py-3">Nenhuma manutencao registrada para este equipamento.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {historicoData.manutencoes.map(man => (
+                          <div key={man.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-gray-900 capitalize">{man.tipo || 'Manutencao'}</span>
+                                <span className="text-gray-600">|</span>
+                                <span className="text-gray-700">{formatarData(man.data_agendada)}</span>
+                                {man.data_realizada && man.data_realizada !== man.data_agendada && (
+                                  <span className="text-gray-500 text-xs">(realizada: {formatarData(man.data_realizada)})</span>
+                                )}
+                              </div>
+                              {getManutencaoStatusBadge(man.status)}
+                            </div>
+                            <div className="flex items-center justify-between text-sm text-gray-600">
+                              <span>{man.tecnico ? `Tecnico: ${man.tecnico}` : 'Tecnico nao informado'}</span>
+                              {man.custo != null && (
+                                <span className="font-semibold text-orange-700">Custo: {formatarMoeda(man.custo)}</span>
+                              )}
+                            </div>
+                            {man.descricao && (
+                              <p className="text-sm text-gray-500 mt-1">{man.descricao}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t p-4 flex justify-end">
+              <Button variant="outline" onClick={() => setHistoricoModal(false)}>
+                Fechar
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

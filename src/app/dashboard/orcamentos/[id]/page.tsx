@@ -6,12 +6,16 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/components/ui/Toast'
 import { supabase } from '@/lib/supabase'
+import { gerarContratoLocacao } from '@/lib/gerarContratoLocacao'
+import { criarLocacaoDoOrcamento } from '@/lib/verificarDisponibilidade'
+import { useEmpresa } from '@/contexts/EmpresaContext'
 import { useRouter, useParams } from 'next/navigation'
 
 export default function OrcamentoDetalhePage() {
   const router = useRouter()
   const params = useParams()
   const { showToast } = useToast()
+  const { empresa } = useEmpresa()
   const [orcamento, setOrcamento] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -43,14 +47,77 @@ export default function OrcamentoDetalhePage() {
 
   const atualizarStatus = async (novoStatus: string) => {
     try {
+      // Se for aprovacao, validar disponibilidade e criar locacao ANTES
+      if (novoStatus === 'aprovado') {
+        const { data: orc } = await supabase.from('orcamentos').select('*').eq('id', id).single()
+        if (!orc) { showToast('Orcamento nao encontrado', 'error'); return }
+
+        const resultado = await criarLocacaoDoOrcamento(orc)
+        if (!resultado.success) {
+          showToast(resultado.error || 'Erro ao criar locacao', 'error')
+          return
+        }
+      }
+
       const { error } = await supabase
         .from('orcamentos')
         .update({ status: novoStatus, updated_at: new Date().toISOString() })
         .eq('id', id)
 
       if (error) throw error
-      showToast(`Orçamento ${novoStatus} com sucesso!`, 'success')
+      showToast(`Orcamento ${novoStatus} com sucesso!`, 'success')
       carregarOrcamento()
+
+      if (novoStatus === 'aprovado') {
+        showToast('Locacao criada automaticamente!', 'success')
+        try {
+          const { data: orc } = await supabase.from('orcamentos').select('*').eq('id', id).single()
+          if (orc) {
+            const { data: cliente } = await supabase.from('clientes').select('*').eq('id', orc.cliente_id).single()
+            let itensContrato: any[] = []
+            try { itensContrato = typeof orc.itens === 'string' ? JSON.parse(orc.itens) : (orc.itens || []) } catch { itensContrato = [] }
+
+            const empresaEndereco = empresa
+              ? [empresa.logradouro, empresa.numero, empresa.complemento, empresa.bairro, empresa.cidade, empresa.estado, empresa.cep].filter(Boolean).join(', ')
+              : ''
+            const clienteEndereco = cliente
+              ? [cliente.logradouro, cliente.numero, cliente.complemento, cliente.bairro, cliente.cidade, cliente.estado, cliente.cep].filter(Boolean).join(', ')
+              : ''
+
+            gerarContratoLocacao({
+              numeroOrcamento: orc.numero_orcamento || `#${orc.id}`,
+              empresaNome: empresa?.nome_fantasia || empresa?.razao_social || '',
+              empresaRazaoSocial: empresa?.razao_social || '',
+              empresaCnpj: empresa?.cnpj || '',
+              empresaEndereco,
+              empresaEmail: empresa?.email || '',
+              empresaTelefone: empresa?.telefone || '',
+              empresaLogo: empresa?.logo_base64 || undefined,
+              clienteNome: cliente?.nome || orc.cliente_nome || '',
+              clienteNomeFantasia: cliente?.nome_fantasia || '',
+              clienteDocumento: cliente?.cpf_cnpj || cliente?.documento || '',
+              clienteEndereco,
+              clienteEmail: cliente?.email || orc.cliente_email || '',
+              clienteTelefone: cliente?.telefone || orc.cliente_telefone || '',
+              localObra: orc.local_obra || '',
+              modalidade: orc.modalidade_locacao || 'mensal',
+              diasLocacao: orc.dias_locacao || 30,
+              dataInicio: orc.data_inicio_locacao || undefined,
+              dataFim: orc.data_fim_locacao || undefined,
+              itens: itensContrato,
+              subtotal: Number(orc.subtotal) || 0,
+              desconto: Number(orc.desconto_valor) || 0,
+              frete: Number(orc.valor_frete) || 0,
+              total: Number(orc.valor_total) || 0,
+              formaPagamento: orc.forma_pagamento || 'pix',
+              condicaoPagamento: orc.condicao_pagamento || '50_ato_30',
+              prazoNaoDevolucaoDias: 15,
+            })
+          }
+        } catch (err) {
+          console.error('Erro ao gerar contrato PDF:', err)
+        }
+      }
     } catch (err: any) {
       showToast('Erro ao atualizar status: ' + err.message, 'error')
     }
@@ -116,7 +183,7 @@ export default function OrcamentoDetalhePage() {
             Orçamento {orcamento.numero_orcamento || `#${orcamento.id}`}
           </h1>
           <p className="text-gray-600">
-            {orcamento.cliente_nome} - {orcamento.data_orcamento ? new Date(orcamento.data_orcamento).toLocaleDateString('pt-BR') : new Date(orcamento.created_at).toLocaleDateString('pt-BR')}
+            {orcamento.cliente_nome} - {orcamento.data_orcamento ? new Date(orcamento.data_orcamento + 'T12:00:00').toLocaleDateString('pt-BR') : new Date(orcamento.created_at).toLocaleDateString('pt-BR')}
           </p>
         </div>
         <div className="flex items-center space-x-3">
@@ -156,13 +223,13 @@ export default function OrcamentoDetalhePage() {
                 {orcamento.data_inicio_locacao && (
                   <div>
                     <span className="font-medium text-gray-600">Início</span>
-                    <p className="font-semibold">{new Date(orcamento.data_inicio_locacao).toLocaleDateString('pt-BR')}</p>
+                    <p className="font-semibold">{new Date(orcamento.data_inicio_locacao + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
                   </div>
                 )}
                 {orcamento.data_fim_locacao && (
                   <div>
                     <span className="font-medium text-gray-600">Fim</span>
-                    <p className="font-semibold">{new Date(orcamento.data_fim_locacao).toLocaleDateString('pt-BR')}</p>
+                    <p className="font-semibold">{new Date(orcamento.data_fim_locacao + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
                   </div>
                 )}
               </div>
@@ -258,13 +325,65 @@ export default function OrcamentoDetalhePage() {
                   </Button>
                 )}
                 {orcamento.status === 'aprovado' && (
-                  <Button onClick={() => {
-                    if (confirm('Tem certeza que deseja cancelar este orcamento aprovado?')) {
-                      atualizarStatus('cancelado')
-                    }
-                  }} variant="danger" className="w-full">
-                    Cancelar Orcamento
-                  </Button>
+                  <>
+                    <Button onClick={async () => {
+                      try {
+                        const { data: cliente } = await supabase.from('clientes').select('*').eq('id', orcamento.cliente_id).single()
+                        let itensContrato: any[] = []
+                        try { itensContrato = typeof orcamento.itens === 'string' ? JSON.parse(orcamento.itens) : (orcamento.itens || []) } catch { itensContrato = [] }
+                        const empresaEndereco = empresa
+                          ? [empresa.logradouro, empresa.numero, empresa.complemento, empresa.bairro, empresa.cidade, empresa.estado, empresa.cep].filter(Boolean).join(', ')
+                          : ''
+                        const clienteEndereco = cliente
+                          ? [cliente.logradouro, cliente.numero, cliente.complemento, cliente.bairro, cliente.cidade, cliente.estado, cliente.cep].filter(Boolean).join(', ')
+                          : ''
+                        gerarContratoLocacao({
+                          numeroOrcamento: orcamento.numero_orcamento || `#${orcamento.id}`,
+                          empresaNome: empresa?.nome_fantasia || empresa?.razao_social || '',
+                          empresaRazaoSocial: empresa?.razao_social || '',
+                          empresaCnpj: empresa?.cnpj || '',
+                          empresaEndereco,
+                          empresaEmail: empresa?.email || '',
+                          empresaTelefone: empresa?.telefone || '',
+                          empresaLogo: empresa?.logo_base64 || undefined,
+                          clienteNome: cliente?.nome || orcamento.cliente_nome || '',
+                          clienteNomeFantasia: cliente?.nome_fantasia || '',
+                          clienteDocumento: cliente?.cpf_cnpj || cliente?.documento || '',
+                          clienteEndereco,
+                          clienteEmail: cliente?.email || orcamento.cliente_email || '',
+                          clienteTelefone: cliente?.telefone || orcamento.cliente_telefone || '',
+                          localObra: orcamento.local_obra || '',
+                          modalidade: orcamento.modalidade_locacao || 'mensal',
+                          diasLocacao: orcamento.dias_locacao || 30,
+                          dataInicio: orcamento.data_inicio_locacao || undefined,
+                          dataFim: orcamento.data_fim_locacao || undefined,
+                          itens: itensContrato,
+                          subtotal: Number(orcamento.subtotal) || 0,
+                          desconto: Number(orcamento.desconto_valor) || 0,
+                          frete: Number(orcamento.valor_frete) || 0,
+                          total: Number(orcamento.valor_total) || 0,
+                          formaPagamento: orcamento.forma_pagamento || 'pix',
+                          condicaoPagamento: orcamento.condicao_pagamento || '50_ato_30',
+                          prazoNaoDevolucaoDias: 15,
+                        })
+                        showToast('Contrato PDF gerado!', 'success')
+                      } catch (err) {
+                        showToast('Erro ao gerar contrato', 'error')
+                      }
+                    }} className="w-full bg-blue-600 hover:bg-blue-700">
+                      Gerar Contrato PDF
+                    </Button>
+                    <Button onClick={() => router.push('/dashboard/locacoes')} variant="outline" className="w-full">
+                      Ver Locacao
+                    </Button>
+                    <Button onClick={() => {
+                      if (confirm('Tem certeza que deseja cancelar este orcamento aprovado?')) {
+                        atualizarStatus('cancelado')
+                      }
+                    }} variant="danger" className="w-full">
+                      Cancelar Orcamento
+                    </Button>
+                  </>
                 )}
                 <Button onClick={enviarEmail} variant="outline" className="w-full">
                   Enviar por Email
@@ -286,7 +405,7 @@ export default function OrcamentoDetalhePage() {
           <Card>
             <CardContent className="p-4">
               <div className="text-xs text-gray-500 space-y-1">
-                {orcamento.data_validade && <p>Validade: {new Date(orcamento.data_validade).toLocaleDateString('pt-BR')}</p>}
+                {orcamento.data_validade && <p>Validade: {new Date(orcamento.data_validade + 'T12:00:00').toLocaleDateString('pt-BR')}</p>}
                 <p>Criado em: {new Date(orcamento.created_at).toLocaleDateString('pt-BR')}</p>
                 {orcamento.updated_at && <p>Atualizado: {new Date(orcamento.updated_at).toLocaleDateString('pt-BR')}</p>}
               </div>

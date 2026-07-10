@@ -8,14 +8,18 @@ import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/components/ui/Toast'
 import { supabase } from '@/lib/supabase'
 import { gerarPDFOrcamento } from '@/lib/gerarPDFOrcamento'
+import { verificarDisponibilidade, DisponibilidadeEquipamento } from '@/lib/verificarDisponibilidade'
+import { useEmpresa } from '@/contexts/EmpresaContext'
 import { useRouter, useParams } from 'next/navigation'
 
 interface Cliente {
   id: number
   nome: string
+  nome_fantasia?: string
   contato?: string
   endereco?: string
   documento?: string
+  cpf_cnpj?: string
   email?: string
   telefone?: string
 }
@@ -45,6 +49,9 @@ interface ItemOrcamento {
   quantidade: number
   preco_unitario: number
   dias_locacao: number
+  tipo_desconto_item: 'percentual' | 'valor'
+  desconto_percentual: number
+  desconto_valor_item: number
   subtotal: number
 }
 
@@ -70,6 +77,7 @@ export default function EditarOrcamentoPage() {
   const router = useRouter()
   const params = useParams()
   const { showToast } = useToast()
+  const { empresa } = useEmpresa()
   const id = params.id as string
 
   const [clientes, setClientes] = useState<Cliente[]>([])
@@ -91,8 +99,13 @@ export default function EditarOrcamentoPage() {
   const [itensOrcamento, setItensOrcamento] = useState<ItemOrcamento[]>([])
   const [modalSeletorAberto, setModalSeletorAberto] = useState(false)
   const [equipamentosSelecionados, setEquipamentosSelecionados] = useState<Record<number, number>>({})
+  const [localObra, setLocalObra] = useState('')
+  const [formaPagamento, setFormaPagamento] = useState('pix')
+  const [condicaoPagamento, setCondicaoPagamento] = useState('50_ato_30')
   const [numeroOrcamento, setNumeroOrcamento] = useState('')
   const [statusOrcamento, setStatusOrcamento] = useState('')
+  const [disponibilidadeMap, setDisponibilidadeMap] = useState<Record<number, DisponibilidadeEquipamento>>({})
+  const [carregandoDisponibilidade, setCarregandoDisponibilidade] = useState(false)
 
   useEffect(() => { carregarTudo() }, [])
 
@@ -128,6 +141,9 @@ export default function EditarOrcamentoPage() {
       setIncluiFrete(orc.inclui_frete || false)
       setFreteResponsavel(orc.frete_responsavel || 'cliente')
       setValorFrete(Number(orc.valor_frete) || 0)
+      setLocalObra(orc.local_obra || '')
+      setFormaPagamento(orc.forma_pagamento || 'pix')
+      setCondicaoPagamento(orc.condicao_pagamento || '50_ato_30')
 
       // Restore discount
       const subtotal = Number(orc.subtotal) || 0
@@ -146,7 +162,13 @@ export default function EditarOrcamentoPage() {
       // Restore items
       let itens: ItemOrcamento[] = []
       try {
-        itens = typeof orc.itens === 'string' ? JSON.parse(orc.itens) : (orc.itens || [])
+        const parsed = typeof orc.itens === 'string' ? JSON.parse(orc.itens) : (orc.itens || [])
+        itens = parsed.map((item: any) => ({
+          ...item,
+          tipo_desconto_item: item.tipo_desconto_item || 'percentual',
+          desconto_percentual: item.desconto_percentual || 0,
+          desconto_valor_item: item.desconto_valor_item || 0
+        }))
       } catch { itens = [] }
       setItensOrcamento(itens)
     } catch (err: any) {
@@ -157,13 +179,27 @@ export default function EditarOrcamentoPage() {
     }
   }
 
+  const carregarDisponibilidade = async () => {
+    setCarregandoDisponibilidade(true)
+    try {
+      const inicio = dataInicio || new Date().toISOString().split('T')[0]
+      const fim = dataFim || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]
+      const mapa = await verificarDisponibilidade(inicio, fim, undefined, parseInt(id))
+      setDisponibilidadeMap(mapa)
+    } catch (err) {
+      console.error('Erro ao verificar disponibilidade:', err)
+    } finally {
+      setCarregandoDisponibilidade(false)
+    }
+  }
+
   const calcularPrecoModalidade = (eq: Equipamento) => {
-    const precoDia = Number(eq.preco_dia) || Number(eq.preco_unitario_dia) || Number(eq.preco_mensal) / 30 || 100
-    const precoMensal = Number(eq.preco_mensal) || precoDia * 30
+    const precoDia = Math.round((Number(eq.preco_dia) || Number(eq.preco_unitario_dia) || Number(eq.preco_mensal) / 30 || 100) * 100) / 100
+    const precoMensal = Math.round((Number(eq.preco_mensal) || precoDia * 30) * 100) / 100
     switch (modalidadeLocacao) {
       case 'diaria': return precoDia
-      case 'semanal': return precoMensal / 30 * 7
-      case 'quinzenal': return precoMensal / 30 * 15
+      case 'semanal': return Math.round(precoMensal / 30 * 7 * 100) / 100
+      case 'quinzenal': return Math.round(precoMensal / 30 * 15 * 100) / 100
       case 'mensal': return precoMensal
       default: return precoDia
     }
@@ -176,17 +212,49 @@ export default function EditarOrcamentoPage() {
     setItensOrcamento([...itensOrcamento, {
       equipamento_id: eq.id, equipamento_nome: eq.nome,
       equipamento_marca: eq.marca || '', equipamento_modelo: eq.modelo || '',
-      quantidade: qtd, preco_unitario: preco, dias_locacao: diasLocacao, subtotal: preco * qtd
+      quantidade: qtd, preco_unitario: preco, dias_locacao: diasLocacao,
+      tipo_desconto_item: 'percentual', desconto_percentual: 0, desconto_valor_item: 0, subtotal: Math.round(preco * qtd * 100) / 100
     }])
   }
 
   const removerItem = (i: number) => setItensOrcamento(itensOrcamento.filter((_, idx) => idx !== i))
 
+  const calcularSubtotalItem = (item: ItemOrcamento, tipoDesc: 'percentual' | 'valor', descPct: number, descVal: number) => {
+    const bruto = Math.round(item.preco_unitario * item.quantidade * 100) / 100
+    if (tipoDesc === 'percentual') {
+      return Math.round(bruto * (1 - Math.min(Math.max(descPct, 0), 100) / 100) * 100) / 100
+    }
+    return Math.round(Math.max(bruto - Math.max(descVal, 0), 0) * 100) / 100
+  }
+
+  const atualizarTipoDescontoItem = (index: number, tipo: 'percentual' | 'valor') => {
+    setItensOrcamento(itensOrcamento.map((item, i) => {
+      if (i !== index) return item
+      const updated = { ...item, tipo_desconto_item: tipo, desconto_percentual: 0, desconto_valor_item: 0 }
+      return { ...updated, subtotal: Math.round(item.preco_unitario * item.quantidade * 100) / 100 }
+    }))
+  }
+
+  const atualizarDescontoItem = (index: number, desconto: number) => {
+    setItensOrcamento(itensOrcamento.map((item, i) => {
+      if (i !== index) return item
+      const descPct = item.tipo_desconto_item === 'percentual' ? desconto : item.desconto_percentual
+      const descVal = item.tipo_desconto_item === 'valor' ? desconto : item.desconto_valor_item
+      const subtotal = calcularSubtotalItem(item, item.tipo_desconto_item, descPct, descVal)
+      return {
+        ...item,
+        desconto_percentual: item.tipo_desconto_item === 'percentual' ? Math.min(Math.max(desconto, 0), 100) : item.desconto_percentual,
+        desconto_valor_item: item.tipo_desconto_item === 'valor' ? Math.max(desconto, 0) : item.desconto_valor_item,
+        subtotal
+      }
+    }))
+  }
+
   const calcularTotais = () => {
-    const subtotal = itensOrcamento.reduce((s, item) => s + item.subtotal, 0)
-    const desc = tipoDesconto === 'percentual' ? (subtotal * descontoPercentual) / 100 : descontoValor
+    const subtotal = Math.round(itensOrcamento.reduce((s, item) => s + item.subtotal, 0) * 100) / 100
+    const desc = Math.round((tipoDesconto === 'percentual' ? (subtotal * descontoPercentual) / 100 : descontoValor) * 100) / 100
     const frete = incluiFrete && freteResponsavel === 'locadora' ? valorFrete : 0
-    return { subtotal, desconto: desc, frete, total: subtotal - desc + frete }
+    return { subtotal, desconto: desc, frete, total: Math.round((subtotal - desc + frete) * 100) / 100 }
   }
 
   const salvarOrcamento = async () => {
@@ -216,6 +284,9 @@ export default function EditarOrcamentoPage() {
         frete_responsavel: freteResponsavel,
         valor_frete: totais.frete,
         inclui_frete: incluiFrete,
+        local_obra: localObra || null,
+        forma_pagamento: formaPagamento,
+        condicao_pagamento: condicaoPagamento,
         itens: JSON.stringify(itensOrcamento),
         updated_at: new Date().toISOString()
       }).eq('id', id)
@@ -300,6 +371,10 @@ export default function EditarOrcamentoPage() {
                   Periodo: {diasLocacao} dias - Modalidade: <strong>{modalidadeLocacao}</strong>
                 </div>
               )}
+              <div>
+                <Label>Local da Obra (endereco)</Label>
+                <Input value={localObra} onChange={(e) => setLocalObra(e.target.value)} placeholder="Endereco completo da obra (opcional)" />
+              </div>
             </CardContent>
           </Card>
 
@@ -307,14 +382,14 @@ export default function EditarOrcamentoPage() {
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
                 Equipamentos
-                <Button onClick={() => setModalSeletorAberto(true)} className="ml-2">+ Selecionar</Button>
+                <Button onClick={() => { setModalSeletorAberto(true); carregarDisponibilidade() }} className="ml-2">+ Selecionar</Button>
               </CardTitle>
             </CardHeader>
             <CardContent>
               {itensOrcamento.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <p>Nenhum equipamento selecionado</p>
-                  <Button onClick={() => setModalSeletorAberto(true)} variant="outline" className="mt-2">+ Adicionar</Button>
+                  <Button onClick={() => { setModalSeletorAberto(true); carregarDisponibilidade() }} variant="outline" className="mt-2">+ Adicionar</Button>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -323,7 +398,31 @@ export default function EditarOrcamentoPage() {
                       <div className="flex-1">
                         <h4 className="font-medium">{item.equipamento_nome}</h4>
                         <p className="text-sm text-gray-600">{item.equipamento_marca} {item.equipamento_modelo && `- ${item.equipamento_modelo}`}</p>
-                        <p className="text-sm font-medium">{formatarMoeda(item.preco_unitario)}/{modalidadeLocacao} x {item.quantidade} = {formatarMoeda(item.subtotal)}</p>
+                        <div className="flex items-center gap-3 mt-1 flex-wrap">
+                          <p className="text-sm font-medium">{formatarMoeda(item.preco_unitario)}/{modalidadeLocacao} x {item.quantidade}</p>
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-gray-500">Desc:</span>
+                            <select value={item.tipo_desconto_item || 'percentual'}
+                              onChange={(e) => atualizarTipoDescontoItem(i, e.target.value as 'percentual' | 'valor')}
+                              className="px-1 py-0.5 text-xs border border-gray-300 rounded">
+                              <option value="percentual">%</option>
+                              <option value="valor">R$</option>
+                            </select>
+                            <input type="number" min="0"
+                              max={item.tipo_desconto_item === 'percentual' ? 100 : undefined}
+                              step={item.tipo_desconto_item === 'percentual' ? "1" : "0.01"}
+                              value={(item.tipo_desconto_item === 'percentual' ? item.desconto_percentual : item.desconto_valor_item) || ''}
+                              onChange={(e) => atualizarDescontoItem(i, parseFloat(e.target.value) || 0)}
+                              placeholder="0"
+                              className="w-16 px-1 py-0.5 text-xs border border-gray-300 rounded text-center" />
+                          </div>
+                          <p className="text-sm font-bold">= {formatarMoeda(item.subtotal)}</p>
+                          {(item.desconto_percentual > 0 || item.desconto_valor_item > 0) && (
+                            <span className="text-xs text-red-600">
+                              (-{item.tipo_desconto_item === 'percentual' ? `${item.desconto_percentual}%` : formatarMoeda(item.desconto_valor_item)})
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <Button onClick={() => removerItem(i)} variant="outline" size="sm">Remover</Button>
                     </div>
@@ -357,6 +456,31 @@ export default function EditarOrcamentoPage() {
                   )}
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle>Pagamento</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label>Forma de Pagamento</Label>
+                  <Select value={formaPagamento} onChange={(e) => setFormaPagamento(e.target.value)}>
+                    <option value="pix">PIX</option>
+                    <option value="cartao_credito">Cartao de Credito</option>
+                    <option value="deposito_bancario">Deposito Bancario</option>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Condicoes de Pagamento</Label>
+                  <Select value={condicaoPagamento} onChange={(e) => setCondicaoPagamento(e.target.value)}>
+                    <option value="antecipado">Antecipado</option>
+                    <option value="50_ato_30">50% no ato + 50% para 30 dias</option>
+                    <option value="final_periodo">Ultimo dia do periodo contratado</option>
+                    <option value="5_dias_apos">5 dias apos o vencimento do contrato</option>
+                  </Select>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -408,9 +532,10 @@ export default function EditarOrcamentoPage() {
             <Button onClick={() => gerarPDFOrcamento({
               numero: numeroOrcamento || undefined,
               clienteNome: clienteSelecionado?.nome || '',
+              clienteNomeFantasia: clienteSelecionado?.nome_fantasia || '',
               clienteTelefone: clienteSelecionado?.telefone || '',
               clienteEmail: clienteSelecionado?.email || '',
-              clienteDocumento: clienteSelecionado?.documento || '',
+              clienteDocumento: clienteSelecionado?.cpf_cnpj || clienteSelecionado?.documento || '',
               modalidade: modalidadeLocacao,
               diasLocacao,
               dataInicio: dataInicio || undefined,
@@ -421,8 +546,10 @@ export default function EditarOrcamentoPage() {
               frete: totais.frete,
               total: totais.total,
               observacoes: observacoes || undefined,
-            })} variant="outline" className="w-full" disabled={!clienteId || itensOrcamento.length === 0}>
-              Visualizar PDF
+              formaPagamento,
+              condicaoPagamento,
+            }, empresa || undefined)} variant="outline" className="w-full" disabled={!clienteId || itensOrcamento.length === 0}>
+              Baixar PDF
             </Button>
             <Button onClick={salvarOrcamento} className="w-full bg-green-600 hover:bg-green-700" disabled={!clienteId || itensOrcamento.length === 0 || saving}>
               {saving ? 'Salvando...' : 'Salvar Alteracoes'}
@@ -440,53 +567,93 @@ export default function EditarOrcamentoPage() {
                 <h2 className="text-2xl font-bold">Selecionar Equipamentos</h2>
                 <Button onClick={() => setModalSeletorAberto(false)} variant="outline">Fechar</Button>
               </div>
-              {equipamentos.length === 0 ? (
-                <p className="text-center py-8 text-gray-500">Nenhum equipamento disponivel</p>
-              ) : (
-                <div className="space-y-4">
-                  {equipamentos.map(eq => (
-                    <div key={eq.id} className="flex items-center justify-between p-4 border rounded-lg">
-                      <div className="flex-1">
-                        <h4 className="font-medium">
-                          {eq.asset_id && <span className="font-mono text-blue-700 mr-2">[{eq.asset_id}]</span>}
-                          {eq.nome}
-                        </h4>
-                        <p className="text-sm text-gray-600">
-                          {eq.marca} {eq.modelo && `- ${eq.modelo}`} {eq.categoria && `- ${eq.categoria}`}
-                          {eq.numero_patrimonio && <span className="ml-2 text-gray-500">| Pat: {eq.numero_patrimonio}</span>}
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-green-600">{formatarMoeda(calcularPrecoModalidade(eq))}/{modalidadeLocacao}</p>
-                          {eq.controle_quantidade && (
-                            <span className={`text-xs px-2 py-0.5 rounded font-medium ${
-                              (eq.quantidade_disponivel || 0) > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
-                            }`}>
-                              Estoque: {eq.quantidade_disponivel} / {eq.quantidade_total}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Input type="number" min="0"
-                          max={eq.controle_quantidade ? eq.quantidade_disponivel : 1}
-                          placeholder="Qtd"
-                          value={equipamentosSelecionados[eq.id] || ''}
-                          onChange={(e) => setEquipamentosSelecionados({ ...equipamentosSelecionados, [eq.id]: parseInt(e.target.value) || 0 })}
-                          className="w-20" />
-                        <Button onClick={() => {
-                          const qtd = equipamentosSelecionados[eq.id] || 1
-                          const maxDisponivel = eq.controle_quantidade ? (eq.quantidade_disponivel || 0) : 1
-                          if (qtd > maxDisponivel) {
-                            showToast(`Maximo disponivel: ${maxDisponivel}`, 'warning')
-                            return
-                          }
-                          if (qtd > 0) { adicionarEquipamento(eq, qtd); setEquipamentosSelecionados({ ...equipamentosSelecionados, [eq.id]: 0 }) }
-                        }} disabled={!equipamentosSelecionados[eq.id]} size="sm">Adicionar</Button>
-                      </div>
-                    </div>
-                  ))}
+              {carregandoDisponibilidade && (
+                <div className="text-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent mx-auto mb-2"></div>
+                  <p className="text-sm text-gray-500">Verificando disponibilidade...</p>
                 </div>
               )}
+              {(() => {
+                const equipamentosDisponiveis = equipamentos.filter(eq => {
+                  const disp = disponibilidadeMap[eq.id]
+                  if (eq.status === 'locado' || eq.status === 'manutencao') {
+                    if (eq.controle_quantidade && (eq.quantidade_disponivel || 0) > 0) {
+                      // Pode ter unidades disponiveis
+                    } else {
+                      return false
+                    }
+                  }
+                  if (disp) {
+                    if (eq.controle_quantidade) {
+                      return Math.min(eq.quantidade_disponivel || 0, disp.quantidade_disponivel) > 0
+                    } else {
+                      return disp.disponivel
+                    }
+                  }
+                  return true
+                })
+                const jaAdicionados = new Set(itensOrcamento.filter(item => {
+                  const eq = equipamentos.find(e => e.id === item.equipamento_id)
+                  return eq && !eq.controle_quantidade
+                }).map(item => item.equipamento_id))
+                const equipamentosFinal = equipamentosDisponiveis.filter(eq => !jaAdicionados.has(eq.id))
+
+                return equipamentosFinal.length === 0 ? (
+                  <p className="text-center py-8 text-gray-500">Nenhum equipamento disponivel para o periodo selecionado</p>
+                ) : (
+                  <div className="space-y-4">
+                    {equipamentosFinal.map(eq => {
+                      const disp = disponibilidadeMap[eq.id]
+                      let maxDisponivelPeriodo = eq.controle_quantidade ? (eq.quantidade_disponivel || 0) : 1
+                      if (disp && eq.controle_quantidade) {
+                        maxDisponivelPeriodo = Math.min(maxDisponivelPeriodo, disp.quantidade_disponivel)
+                      }
+                      const qtdJaNoOrcamento = itensOrcamento.filter(i => i.equipamento_id === eq.id).reduce((s, i) => s + i.quantidade, 0)
+                      maxDisponivelPeriodo = Math.max(maxDisponivelPeriodo - qtdJaNoOrcamento, 0)
+                      if (maxDisponivelPeriodo <= 0) return null
+
+                      return (
+                      <div key={eq.id} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="flex-1">
+                          <h4 className="font-medium">
+                            {eq.asset_id && <span className="font-mono text-blue-700 mr-2">[{eq.asset_id}]</span>}
+                            {eq.nome}
+                          </h4>
+                          <p className="text-sm text-gray-600">
+                            {eq.marca} {eq.modelo && `- ${eq.modelo}`} {eq.categoria && `- ${eq.categoria}`}
+                            {eq.numero_patrimonio && <span className="ml-2 text-gray-500">| Pat: {eq.numero_patrimonio}</span>}
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-green-600">{formatarMoeda(calcularPrecoModalidade(eq))}/{modalidadeLocacao}</p>
+                            {eq.controle_quantidade && (
+                              <span className="text-xs px-2 py-0.5 rounded font-medium bg-emerald-100 text-emerald-800">
+                                Disponivel: {maxDisponivelPeriodo} / {eq.quantidade_total}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Input type="number" min="1"
+                            max={eq.controle_quantidade ? maxDisponivelPeriodo : 1}
+                            placeholder="Qtd"
+                            value={equipamentosSelecionados[eq.id] || ''}
+                            onChange={(e) => setEquipamentosSelecionados({ ...equipamentosSelecionados, [eq.id]: parseInt(e.target.value) || 0 })}
+                            className="w-20" />
+                          <Button onClick={() => {
+                            const qtd = equipamentosSelecionados[eq.id] || 1
+                            if (qtd > maxDisponivelPeriodo) {
+                              showToast(`Maximo disponivel no periodo: ${maxDisponivelPeriodo}`, 'warning')
+                              return
+                            }
+                            if (qtd > 0) { adicionarEquipamento(eq, qtd); setEquipamentosSelecionados({ ...equipamentosSelecionados, [eq.id]: 0 }) }
+                          }} disabled={!equipamentosSelecionados[eq.id]} size="sm">Adicionar</Button>
+                        </div>
+                      </div>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
               <div className="flex justify-end mt-6">
                 <Button onClick={() => setModalSeletorAberto(false)}>Concluir Selecao</Button>
               </div>

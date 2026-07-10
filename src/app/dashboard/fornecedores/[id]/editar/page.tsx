@@ -7,37 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
 import { supabase } from '@/lib/supabase'
-
-const estadosBrasil = [
-  'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG',
-  'PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'
-]
-
-function maskCnpj(value: string) {
-  const nums = value.replace(/\D/g, '')
-  return nums
-    .replace(/(\d{2})(\d)/, '$1.$2')
-    .replace(/(\d{3})(\d)/, '$1.$2')
-    .replace(/(\d{3})(\d)/, '$1/$2')
-    .replace(/(\d{4})(\d{1,2})$/, '$1-$2')
-}
-
-function maskTelefone(value: string) {
-  const nums = value.replace(/\D/g, '')
-  if (nums.length <= 10) {
-    return nums
-      .replace(/(\d{2})(\d)/, '($1) $2')
-      .replace(/(\d{4})(\d{1,4})$/, '$1-$2')
-  }
-  return nums
-    .replace(/(\d{2})(\d)/, '($1) $2')
-    .replace(/(\d{5})(\d{1,4})$/, '$1-$2')
-}
-
-function maskCep(value: string) {
-  const nums = value.replace(/\D/g, '')
-  return nums.replace(/(\d{5})(\d{1,3})$/, '$1-$2')
-}
+import { estadosBrasil, maskCnpj, maskTelefone, maskCep } from '@/lib/masks'
 
 export default function EditarFornecedorPage() {
   const router = useRouter()
@@ -45,6 +15,7 @@ export default function EditarFornecedorPage() {
   const { showToast } = useToast()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [buscando, setBuscando] = useState(false)
   const [form, setForm] = useState({
     nome: '',
     cnpj: '',
@@ -103,6 +74,57 @@ export default function EditarFornecedorPage() {
     else if (name === 'telefone') masked = maskTelefone(value)
     else if (name === 'cep') masked = maskCep(value)
     setForm({ ...form, [name]: masked })
+  }
+
+  const buscarCnpj = async () => {
+    const cnpjNumeros = form.cnpj.replace(/\D/g, '')
+    if (cnpjNumeros.length !== 14) {
+      showToast('Digite um CNPJ completo com 14 dígitos', 'error')
+      return
+    }
+
+    setBuscando(true)
+    try {
+      const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpjNumeros}`)
+      if (!res.ok) {
+        if (res.status === 404) {
+          showToast('CNPJ não encontrado na base da Receita Federal', 'error')
+        } else {
+          showToast('Erro ao consultar CNPJ. Tente novamente.', 'error')
+        }
+        return
+      }
+
+      const data = await res.json()
+
+      const telefone = data.ddd_telefone_1
+        ? data.ddd_telefone_1.replace(/\s/g, '')
+        : ''
+
+      const partes = [
+        data.logradouro,
+        data.numero,
+        data.complemento
+      ].filter(Boolean)
+      const endereco = partes.join(', ')
+
+      setForm(prev => ({
+        ...prev,
+        nome: data.razao_social || prev.nome,
+        email: data.email && data.email.trim() ? data.email.trim().toLowerCase() : prev.email,
+        telefone: telefone ? maskTelefone(telefone) : prev.telefone,
+        endereco: endereco || prev.endereco,
+        cidade: data.municipio || prev.cidade,
+        estado: data.uf || prev.estado,
+        cep: data.cep ? maskCep(data.cep) : prev.cep,
+      }))
+
+      showToast('Dados do CNPJ preenchidos com sucesso!', 'success')
+    } catch (error: any) {
+      showToast('Erro ao consultar CNPJ. Verifique sua conexão.', 'error')
+    } finally {
+      setBuscando(false)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -196,21 +218,33 @@ export default function EditarFornecedorPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">CNPJ</label>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <Input
+                      name="cnpj"
+                      placeholder="00.000.000/0000-00"
+                      value={form.cnpj}
+                      onChange={handleChange}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={buscarCnpj}
+                    disabled={buscando || form.cnpj.replace(/\D/g, '').length !== 14}
+                  >
+                    {buscando ? 'Buscando...' : 'Buscar CNPJ'}
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Digite o CNPJ e clique em Buscar para preencher automaticamente</p>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
                 <Input
                   name="nome"
                   placeholder="Razão social do fornecedor"
                   value={form.nome}
-                  onChange={handleChange}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">CNPJ</label>
-                <Input
-                  name="cnpj"
-                  placeholder="00.000.000/0000-00"
-                  value={form.cnpj}
                   onChange={handleChange}
                 />
               </div>

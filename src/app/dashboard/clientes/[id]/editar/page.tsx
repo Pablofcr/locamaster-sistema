@@ -7,43 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
 import { supabase } from '@/lib/supabase'
-
-const estadosBrasil = [
-  'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG',
-  'PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'
-]
-
-function maskCpfCnpj(value: string) {
-  const nums = value.replace(/\D/g, '')
-  if (nums.length <= 11) {
-    return nums
-      .replace(/(\d{3})(\d)/, '$1.$2')
-      .replace(/(\d{3})(\d)/, '$1.$2')
-      .replace(/(\d{3})(\d{1,2})$/, '$1-$2')
-  }
-  return nums
-    .replace(/(\d{2})(\d)/, '$1.$2')
-    .replace(/(\d{3})(\d)/, '$1.$2')
-    .replace(/(\d{3})(\d)/, '$1/$2')
-    .replace(/(\d{4})(\d{1,2})$/, '$1-$2')
-}
-
-function maskTelefone(value: string) {
-  const nums = value.replace(/\D/g, '')
-  if (nums.length <= 10) {
-    return nums
-      .replace(/(\d{2})(\d)/, '($1) $2')
-      .replace(/(\d{4})(\d{1,4})$/, '$1-$2')
-  }
-  return nums
-    .replace(/(\d{2})(\d)/, '($1) $2')
-    .replace(/(\d{5})(\d{1,4})$/, '$1-$2')
-}
-
-function maskCep(value: string) {
-  const nums = value.replace(/\D/g, '')
-  return nums.replace(/(\d{5})(\d{1,3})$/, '$1-$2')
-}
+import { estadosBrasil, maskCpfCnpj, maskTelefone, maskCep } from '@/lib/masks'
 
 export default function EditarClientePage() {
   const router = useRouter()
@@ -54,6 +18,7 @@ export default function EditarClientePage() {
   const [consultando, setConsultando] = useState(false)
   const [form, setForm] = useState({
     nome: '',
+    nome_fantasia: '',
     email: '',
     telefone: '',
     cpf_cnpj: '',
@@ -84,6 +49,7 @@ export default function EditarClientePage() {
       if (data) {
         setForm({
           nome: data.nome || '',
+          nome_fantasia: data.nome_fantasia || '',
           email: data.email || '',
           telefone: maskTelefone(data.telefone || ''),
           cpf_cnpj: maskCpfCnpj(data.cpf_cnpj || ''),
@@ -134,6 +100,7 @@ export default function EditarClientePage() {
       setForm(prev => ({
         ...prev,
         nome: data.razao_social || prev.nome,
+        nome_fantasia: data.nome_fantasia || prev.nome_fantasia,
         email: data.email || prev.email,
         telefone: telefone ? maskTelefone(telefone) : prev.telefone,
         logradouro: data.logradouro || prev.logradouro,
@@ -167,6 +134,7 @@ export default function EditarClientePage() {
         .from('clientes')
         .update({
           nome: form.nome.trim(),
+          nome_fantasia: form.nome_fantasia.trim() || null,
           email: form.email.trim() || null,
           telefone: form.telefone.trim() || null,
           cpf_cnpj: form.cpf_cnpj.trim() || null,
@@ -245,16 +213,7 @@ export default function EditarClientePage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
-                <Input
-                  name="nome"
-                  placeholder="Nome completo ou razão social"
-                  value={form.nome}
-                  onChange={handleChange}
-                />
-              </div>
-              <div>
+              <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">CPF/CNPJ</label>
                 <div className="flex space-x-2">
                   <Input
@@ -276,6 +235,24 @@ export default function EditarClientePage() {
                     </Button>
                   )}
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nome / Razao Social *</label>
+                <Input
+                  name="nome"
+                  placeholder="Nome completo ou razao social"
+                  value={form.nome}
+                  onChange={handleChange}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nome Fantasia</label>
+                <Input
+                  name="nome_fantasia"
+                  placeholder="Nome Fantasia"
+                  value={form.nome_fantasia}
+                  onChange={handleChange}
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
