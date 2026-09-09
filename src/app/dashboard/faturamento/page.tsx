@@ -85,6 +85,13 @@ export default function FaturamentoPage() {
   })
   const [editandoRegra, setEditandoRegra] = useState<number | null>(null)
   const [showRegraForm, setShowRegraForm] = useState(false)
+
+  // Baixa em lote: a data e perguntada, nunca assumida como hoje
+  const [showBaixaLote, setShowBaixaLote] = useState(false)
+  const [baixaEscolhendoData, setBaixaEscolhendoData] = useState(false)
+  const [baixaData, setBaixaData] = useState('')
+  const [baixaForma, setBaixaForma] = useState('')
+  const [baixando, setBaixando] = useState(false)
   const [logCobranca, setLogCobranca] = useState<any[]>([])
   const [executandoRegua, setExecutandoRegua] = useState(false)
 
@@ -204,23 +211,58 @@ export default function FaturamentoPage() {
     }
   }
 
-  const acaoLoteMarcarPago = async () => {
+  /**
+   * Data de hoje no fuso local, como YYYY-MM-DD.
+   *
+   * toISOString() devolve UTC: no horario de Brasilia (UTC-3), depois das 21h
+   * ele ja retorna o dia seguinte, o que faria a baixa cair no dia errado.
+   */
+  const hojeISO = () => {
+    const d = new Date()
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0]
+  }
+
+  /** Faturas da selecao que ainda podem receber baixa. */
+  const faturasParaBaixa = () =>
+    Array.from(selectedFaturas)
+      .map(id => faturas.find(f => f.id === id))
+      .filter(f => f && f.status !== 'pago' && f.status !== 'cancelado')
+
+  const abrirBaixaLote = () => {
     if (selectedFaturas.size === 0) return
+    setBaixaEscolhendoData(false)
+    setBaixaData('')
+    setBaixaForma('')
+    setShowBaixaLote(true)
+  }
+
+  /**
+   * Baixa as faturas selecionadas na data informada.
+   *
+   * A data e sempre escolhida pelo usuario — ou confirmando que foi hoje, ou
+   * pelo calendario. E ela que define em qual mes a receita aparece em
+   * Recebimentos e Relatorios, entao assumir "hoje" jogava o valor no mes
+   * errado quando a baixa era lancada depois do recebimento.
+   */
+  const acaoLoteMarcarPago = async (dataPagamento: string) => {
+    const alvo = faturasParaBaixa()
+    if (alvo.length === 0) { showToast('Nenhuma fatura da selecao pode ser baixada', 'warning'); return }
+    setBaixando(true)
     try {
-      for (const id of selectedFaturas) {
-        const fatura = faturas.find(f => f.id === id)
-        if (fatura && fatura.status !== 'pago' && fatura.status !== 'cancelado') {
-          await registrarPagamento({
-            fatura_id: id,
-            valor: Number(fatura.valor) - Number(fatura.valor_pago || 0),
-            data_pagamento: new Date().toISOString().split('T')[0],
-          })
-        }
+      for (const fatura of alvo) {
+        await registrarPagamento({
+          fatura_id: fatura.id,
+          valor: Number(fatura.valor) - Number(fatura.valor_pago || 0),
+          data_pagamento: dataPagamento,
+          forma_pagamento: baixaForma || undefined,
+        })
       }
-      showToast(`${selectedFaturas.size} faturas marcadas como pagas`, 'success')
+      showToast(`${alvo.length} fatura(s) baixada(s) em ${formatarData(dataPagamento)}`, 'success')
+      setShowBaixaLote(false)
       setSelectedFaturas(new Set())
       carregarFaturas()
     } catch { showToast('Erro ao processar lote', 'error') }
+    finally { setBaixando(false) }
   }
 
   const acaoLoteCancelar = async () => {
@@ -688,7 +730,7 @@ export default function FaturamentoPage() {
           {selectedFaturas.size > 0 && (
             <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
               <span className="text-sm font-medium text-blue-700">{selectedFaturas.size} selecionadas</span>
-              <Button size="sm" onClick={acaoLoteMarcarPago}>Marcar Pagas</Button>
+              <Button size="sm" onClick={abrirBaixaLote}>Marcar Pagas</Button>
               <Button size="sm" variant="danger" onClick={acaoLoteCancelar}>Cancelar</Button>
               <Button size="sm" variant="outline" onClick={() => setSelectedFaturas(new Set())}>Limpar</Button>
             </div>
@@ -1222,6 +1264,92 @@ export default function FaturamentoPage() {
           )}
         </div>
       )}
+
+      {/* ============ MODAL: BAIXA EM LOTE ============ */}
+      {showBaixaLote && (() => {
+        const alvo = faturasParaBaixa()
+        const total = alvo.reduce((s, f) => s + (Number(f.valor) - Number(f.valor_pago || 0)), 0)
+        const ignoradas = selectedFaturas.size - alvo.length
+        return (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+              <h3 className="text-lg font-bold mb-4">
+                Marcar {alvo.length} fatura{alvo.length === 1 ? '' : 's'} como paga{alvo.length === 1 ? '' : 's'}
+              </h3>
+
+              <div className="border rounded-lg divide-y mb-4 max-h-48 overflow-y-auto">
+                {alvo.map(f => (
+                  <div key={f.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                    <span className="font-medium text-gray-700">{f.numero}</span>
+                    <span className="text-gray-600">{formatarMoeda(Number(f.valor) - Number(f.valor_pago || 0))}</span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between px-3 py-2 text-sm bg-gray-50">
+                  <span className="font-semibold text-gray-700">Total</span>
+                  <span className="font-bold text-green-600">{formatarMoeda(total)}</span>
+                </div>
+              </div>
+
+              {ignoradas > 0 && (
+                <p className="text-xs text-yellow-700 bg-yellow-50 rounded px-3 py-2 mb-4">
+                  {ignoradas} fatura(s) da selecao ja estao pagas ou canceladas e serao ignoradas.
+                </p>
+              )}
+
+              {!baixaEscolhendoData ? (
+                <>
+                  <p className="text-sm font-medium text-gray-700 mb-3">O pagamento foi recebido hoje?</p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Button className="flex-1" disabled={baixando}
+                      onClick={() => acaoLoteMarcarPago(hojeISO())}>
+                      Sim - {formatarData(hojeISO())}
+                    </Button>
+                    <Button className="flex-1" variant="outline" disabled={baixando}
+                      onClick={() => setBaixaEscolhendoData(true)}>
+                      Nao, outra data
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Em que dia o pagamento foi recebido?
+                  </label>
+                  {/* Sem data pre-preenchida: a escolha tem que ser deliberada */}
+                  <Input type="date" value={baixaData} max={hojeISO()}
+                    onChange={e => setBaixaData(e.target.value)} />
+                  <p className="text-xs text-gray-500 mt-1 mb-4">
+                    Esta data define em qual mes o valor entra em Recebimentos e Relatorios.
+                  </p>
+                  <Button className="w-full" disabled={!baixaData || baixando}
+                    onClick={() => acaoLoteMarcarPago(baixaData)}>
+                    Confirmar baixa
+                  </Button>
+                </>
+              )}
+
+              <div className="mt-4">
+                <label className="block text-xs text-gray-500 mb-1">Forma de pagamento (opcional)</label>
+                <select value={baixaForma} onChange={e => setBaixaForma(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+                  <option value="">Selecionar...</option>
+                  <option value="PIX">PIX</option>
+                  <option value="Boleto">Boleto</option>
+                  <option value="Transferencia">Transferencia</option>
+                  <option value="Dinheiro">Dinheiro</option>
+                  <option value="Cartao">Cartao</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end mt-4">
+                <Button variant="outline" disabled={baixando} onClick={() => setShowBaixaLote(false)}>
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

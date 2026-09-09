@@ -552,6 +552,51 @@ export async function registrarPagamento(params: {
   return { totalPago, status: novoStatus }
 }
 
+// ============ CORRIGIR DATA DE UM PAGAMENTO ============
+
+/**
+ * Corrige a data de um pagamento ja lancado.
+ *
+ * A data do pagamento e o que define em qual mes a receita aparece nas telas
+ * de Recebimentos e Relatorios, entao lancar a data errada joga o valor no mes
+ * errado. Esta funcao permite corrigir sem apagar e relancar o pagamento.
+ *
+ * A fatura guarda em data_pagamento a data do pagamento que a quitou — a mais
+ * recente. Por isso ela e recalculada a partir de todos os pagamentos, e nao
+ * simplesmente sobrescrita com a nova data.
+ */
+export async function corrigirDataPagamento(pagamentoId: number, faturaId: number, novaData: string) {
+  if (!novaData) throw new Error('Informe a nova data do pagamento')
+
+  const { error } = await supabase
+    .from('pagamentos')
+    .update({ data_pagamento: novaData })
+    .eq('id', pagamentoId)
+  if (error) throw error
+
+  const { data: pagamentos } = await supabase
+    .from('pagamentos')
+    .select('data_pagamento')
+    .eq('fatura_id', faturaId)
+
+  const datas = (pagamentos || []).map((p: any) => p.data_pagamento).filter(Boolean).sort()
+  const dataQuitacao = datas.length > 0 ? datas[datas.length - 1] : null
+
+  const { data: fatura } = await supabase
+    .from('faturas')
+    .select('status')
+    .eq('id', faturaId)
+    .single()
+
+  // Só a fatura quitada carrega data_pagamento; parcial ou cancelada segue sem.
+  if (fatura?.status === 'pago') {
+    await supabase.from('faturas').update({
+      data_pagamento: dataQuitacao,
+      updated_at: new Date().toISOString(),
+    }).eq('id', faturaId)
+  }
+}
+
 // ============ CANCELAR FATURA ============
 
 export async function cancelarFatura(faturaId: number, motivo: string) {

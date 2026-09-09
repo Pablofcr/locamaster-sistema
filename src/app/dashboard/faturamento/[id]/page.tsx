@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/components/ui/Toast'
 import { supabase } from '@/lib/supabase'
-import { formatarMoeda, formatarData, registrarPagamento, cancelarFatura } from '@/lib/faturamento'
+import { formatarMoeda, formatarData, registrarPagamento, cancelarFatura, corrigirDataPagamento } from '@/lib/faturamento'
 import { obterLogCobranca, registrarAcaoManual, abrirWhatsApp, processarTemplate } from '@/lib/cobranca'
 import { gerarPDFFatura } from '@/lib/gerarPDFFatura'
 import { useEmpresa } from '@/contexts/EmpresaContext'
@@ -37,6 +37,10 @@ export default function FaturaDetalhePage() {
   const [pgForm, setPgForm] = useState({
     valor: '', data_pagamento: new Date().toISOString().split('T')[0], forma_pagamento: '', observacoes: ''
   })
+
+  // Correcao da data de um pagamento ja lancado
+  const [pgEditandoId, setPgEditandoId] = useState<number | null>(null)
+  const [pgNovaData, setPgNovaData] = useState('')
 
   // Formulário cancelamento
   const [motivoCancelamento, setMotivoCancelamento] = useState('')
@@ -133,6 +137,17 @@ export default function FaturaDetalhePage() {
       showToast('Pagamento registrado!', 'success')
       setShowPagamento(false)
       setPgForm({ valor: '', data_pagamento: new Date().toISOString().split('T')[0], forma_pagamento: '', observacoes: '' })
+      carregarFatura()
+    } catch (err: any) { showToast('Erro: ' + err.message, 'error') }
+  }
+
+  const handleCorrigirData = async (pagamentoId: number) => {
+    if (!pgNovaData) { showToast('Informe a nova data', 'warning'); return }
+    try {
+      await corrigirDataPagamento(pagamentoId, faturaId, pgNovaData)
+      showToast('Data do pagamento corrigida!', 'success')
+      setPgEditandoId(null)
+      setPgNovaData('')
       carregarFatura()
     } catch (err: any) { showToast('Erro: ' + err.message, 'error') }
   }
@@ -397,15 +412,34 @@ export default function FaturaDetalhePage() {
                       <th className="p-3 text-right">Valor</th>
                       <th className="p-3 text-left">Forma</th>
                       <th className="p-3 text-left">Obs</th>
+                      <th className="p-3 text-right">Acoes</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {pagamentos.map(pg => (
                       <tr key={pg.id}>
-                        <td className="p-3">{formatarData(pg.data_pagamento)}</td>
+                        <td className="p-3">
+                          {pgEditandoId === pg.id ? (
+                            <Input type="date" value={pgNovaData} onChange={e => setPgNovaData(e.target.value)} />
+                          ) : (
+                            formatarData(pg.data_pagamento)
+                          )}
+                        </td>
                         <td className="p-3 text-right font-medium text-green-600">{formatarMoeda(Number(pg.valor))}</td>
                         <td className="p-3">{pg.forma_pagamento || '-'}</td>
                         <td className="p-3 text-gray-500 text-xs">{pg.observacoes || '-'}</td>
+                        <td className="p-3 text-right whitespace-nowrap">
+                          {pgEditandoId === pg.id ? (
+                            <>
+                              <Button size="sm" onClick={() => handleCorrigirData(pg.id)}>Salvar</Button>
+                              <Button size="sm" variant="outline" className="ml-2" onClick={() => { setPgEditandoId(null); setPgNovaData('') }}>Cancelar</Button>
+                            </>
+                          ) : (
+                            <Button size="sm" variant="outline" onClick={() => { setPgEditandoId(pg.id); setPgNovaData(pg.data_pagamento || '') }}>
+                              Corrigir data
+                            </Button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
