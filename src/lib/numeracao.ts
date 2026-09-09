@@ -31,7 +31,7 @@ export function extrairSequencial(numero: string | null | undefined): number | n
   if (partes.length < 2) return null
 
   const prefixo = partes[0]
-  if (prefixo !== 'ORC' && prefixo !== 'LOC') return null
+  if (prefixo !== 'ORC' && prefixo !== 'LOC' && prefixo !== 'FAT') return null
 
   // Descarta um eventual sufixo de renovacao no fim (R1, R2, ...)
   if (/^R\d+$/.test(partes[partes.length - 1])) partes.pop()
@@ -122,3 +122,39 @@ export function numeroCorrespondeBusca(numeroDoc: string | null | undefined, ter
 
   return false
 }
+
+/**
+ * Formato de cada documento, como exibido na tela de Configuracoes.
+ *
+ * Fica aqui, junto das funcoes que geram os numeros, para que a tela nunca
+ * possa divergir do que o sistema realmente faz — foi o que aconteceu antes,
+ * quando a tela anunciava ORC-YYYY-NNN e o codigo gerava ORC-NNNN.
+ *
+ * Os exemplos usam um sequencial ficticio so para ilustrar o formato.
+ */
+export const FORMATOS_NUMERACAO = {
+  orcamento: {
+    rotulo: 'Orcamentos',
+    formato: `ORC-${'N'.repeat(PADDING)}`,
+    exemplo: formatarNumeroOrcamento(12),
+    nota: 'Sequencial unico, compartilhado com os contratos.',
+  },
+  locacao: {
+    rotulo: 'Contratos de locacao',
+    formato: `LOC-AAAA-${'N'.repeat(PADDING)}`,
+    exemplo: formatarNumeroLocacao(12, 2026),
+    nota: 'Herda o numero do orcamento que deu origem ao contrato.',
+  },
+  renovacao: {
+    rotulo: 'Renovacoes',
+    formato: `LOC-AAAA-${'N'.repeat(PADDING)}-RN`,
+    exemplo: formatarNumeroRenovacao(formatarNumeroLocacao(12, 2026), 1),
+    nota: 'Sufixo -R1, -R2 sobre o contrato original. Nao consome sequencial.',
+  },
+  fatura: {
+    rotulo: 'Faturas',
+    formato: 'FAT-AAAA-NNN',
+    exemplo: 'FAT-2026-001',
+    nota: 'Sequencial proprio, reiniciado a cada ano.',
+  },
+} as const

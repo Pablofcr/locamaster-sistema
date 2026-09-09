@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { hojeISO } from '@/lib/data'
+import { proximoSequencial } from '@/lib/numeracao'
 
 // ============ HELPERS ============
 
@@ -15,14 +16,24 @@ export function formatarData(dateStr: string): string {
 
 // ============ GERAR NUMERO SEQUENCIAL ============
 
+/**
+ * Gera o numero de uma fatura: FAT-AAAA-NNN
+ *
+ * A fatura tem sequencial proprio, reiniciado a cada ano — diferente do
+ * sequencial de orcamentos e contratos, que e unico e atravessa os anos.
+ *
+ * O numero vem do MAIOR ja emitido no ano, nunca da contagem de linhas:
+ * contar faz o proximo numero repetir um ja emitido assim que uma fatura e
+ * apagada, e fatura repetida e problema com o cliente.
+ */
 export async function gerarNumeroFatura(): Promise<string> {
   const ano = new Date().getFullYear()
-  const { count } = await supabase
+  const { data } = await supabase
     .from('faturas')
-    .select('*', { count: 'exact', head: true })
+    .select('numero')
     .like('numero', `FAT-${ano}-%`)
 
-  const sequencial = (count || 0) + 1
+  const sequencial = proximoSequencial((data || []).map((f: any) => f.numero))
   return `FAT-${ano}-${String(sequencial).padStart(3, '0')}`
 }
 

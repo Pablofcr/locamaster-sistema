@@ -4,10 +4,10 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/components/ui/Toast'
 import { useEmpresa } from '@/contexts/EmpresaContext'
+import { FORMATOS_NUMERACAO } from '@/lib/numeracao'
 
 export default function ConfiguracoesPage() {
   const { showToast } = useToast()
@@ -16,8 +16,7 @@ export default function ConfiguracoesPage() {
   const [activeTab, setActiveTab] = useState('empresa')
 
   const [sistemaData, setSistemaData] = useState({
-    notificacoesEmail: true, whatsappAutomatico: false, backupAutomatico: true,
-    formatoOrcamento: 'ORC-NNNN', formatoLocacao: 'LOC-YYYY-NNNN', formatoFatura: 'FAT-YYYY-NNN'
+    notificacoesEmail: true, whatsappAutomatico: false, backupAutomatico: true
   })
 
   const salvarSistema = () => {
@@ -190,25 +189,31 @@ export default function ConfiguracoesPage() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Configuracoes de Numeracao</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Numeracao de Documentos</CardTitle></CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">Formato Orcamentos:</label>
-              <Input value={sistemaData.formatoOrcamento} onChange={(e) => setSistemaData({ ...sistemaData, formatoOrcamento: e.target.value })} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Formato Locacoes:</label>
-              <Input value={sistemaData.formatoLocacao} onChange={(e) => setSistemaData({ ...sistemaData, formatoLocacao: e.target.value })} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Formato Faturas:</label>
-              <Input value={sistemaData.formatoFatura} onChange={(e) => setSistemaData({ ...sistemaData, formatoFatura: e.target.value })} />
-            </div>
+          <p className="text-sm text-gray-600 mb-4">
+            Os formatos abaixo sao definidos pelo sistema e nao podem ser alterados:
+            o contrato herda o numero do orcamento que lhe deu origem, e mudar o
+            formato quebraria essa correspondencia nos documentos ja assinados.
+          </p>
+          <div className="divide-y border rounded-lg">
+            {Object.entries(FORMATOS_NUMERACAO).map(([chave, f]) => (
+              <div key={chave} className="p-4">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <span className="text-sm font-medium text-gray-900">{f.rotulo}</span>
+                  <code className="text-sm text-gray-500">{f.formato}</code>
+                </div>
+                <div className="mt-1 flex flex-wrap items-baseline gap-2">
+                  <span className="text-xs text-gray-400">Exemplo:</span>
+                  <code className="text-sm font-semibold text-blue-700">{f.exemplo}</code>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">{f.nota}</p>
+              </div>
+            ))}
           </div>
-          <div className="mt-6">
-            <Button onClick={salvarSistema}>Salvar Numeracao</Button>
-          </div>
+          <p className="text-xs text-gray-400 mt-3">
+            AAAA = ano &middot; N = digito do sequencial
+          </p>
         </CardContent>
       </Card>
     </div>

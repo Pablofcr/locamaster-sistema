@@ -54,7 +54,8 @@ eq('com espacos', n.extrairSequencial('  LOC-2026-0012  '), 12)
 eq('nulo', n.extrairSequencial(null), null)
 eq('vazio', n.extrairSequencial(''), null)
 eq('lixo', n.extrairSequencial('CONSORCIO'), null)
-eq('prefixo desconhecido', n.extrairSequencial('FAT-2026-0012'), null)
+eq('fatura', n.extrairSequencial('FAT-2026-001'), 1)
+eq('prefixo desconhecido', n.extrairSequencial('NFE-2026-0012'), null)
 eq('sem sequencial', n.extrairSequencial('ORC-ABC'), null)
 
 console.log('\n--- proximoSequencial (a prova de delecao) ---')
@@ -89,6 +90,21 @@ console.log('\n--- ordenacao alfabetica (o traco preserva a ordem) ---')
 const ordenado = ['LOC-2026-0011', 'LOC-2026-0010-R1', 'LOC-2026-0010', 'LOC-2026-0010-R2'].sort()
 eq('renovacoes ficam entre 0010 e 0011', ordenado,
   ['LOC-2026-0010', 'LOC-2026-0010-R1', 'LOC-2026-0010-R2', 'LOC-2026-0011'])
+
+console.log('\n--- formatos exibidos na tela de configuracoes ---')
+eq('exemplo do orcamento confere com o gerador',
+  n.FORMATOS_NUMERACAO.orcamento.exemplo, n.formatarNumeroOrcamento(12))
+eq('exemplo do contrato confere com o gerador',
+  n.FORMATOS_NUMERACAO.locacao.exemplo, n.formatarNumeroLocacao(12, 2026))
+eq('exemplo da renovacao confere com o gerador',
+  n.FORMATOS_NUMERACAO.renovacao.exemplo,
+  n.formatarNumeroRenovacao(n.formatarNumeroLocacao(12, 2026), 1))
+eq('formato do orcamento usa o padding real do gerador',
+  n.FORMATOS_NUMERACAO.orcamento.formato,
+  'ORC-' + 'N'.repeat(n.formatarNumeroOrcamento(1).split('-')[1].length))
+eq('formato do contrato usa o padding real do gerador',
+  n.FORMATOS_NUMERACAO.locacao.formato,
+  'LOC-AAAA-' + 'N'.repeat(n.formatarNumeroLocacao(1, 2026).split('-')[2].length))
 
 console.log('\n--- busca cruzada ---')
 eq('acha contrato pelo numero do orcamento', n.numeroCorrespondeBusca('LOC-2026-0012', 'ORC-0012'), true)
