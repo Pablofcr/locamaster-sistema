@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "verificar:numeracao": "node scripts/verificar-numeracao.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.86.0",
