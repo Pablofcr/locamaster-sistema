@@ -1,4 +1,10 @@
 import { supabase } from '@/lib/supabase'
+import {
+  extrairSequencial,
+  formatarNumeroLocacao,
+  numeroLocacaoDoOrcamento,
+  proximoSequencial,
+} from '@/lib/numeracao'
 
 export interface DisponibilidadeEquipamento {
   disponivel: boolean
@@ -125,14 +131,43 @@ export async function verificarDisponibilidade(
 }
 
 /**
- * Gera numero sequencial para locacao: LOC-YYYY-NNN
+ * Busca todos os numeros ja emitidos, em orcamentos e contratos.
+ * O sequencial e unico entre os dois documentos, entao o contador precisa
+ * enxergar as duas tabelas.
  */
-export async function gerarNumeroLocacao(): Promise<string> {
+async function buscarNumerosEmitidos(): Promise<{ todos: string[]; locacoes: string[] }> {
+  const [orcRes, locRes] = await Promise.all([
+    supabase.from('orcamentos').select('numero_orcamento'),
+    supabase.from('locacoes').select('numero'),
+  ])
+  const orcamentos = (orcRes.data || []).map((r: any) => r.numero_orcamento)
+  const locacoes = (locRes.data || []).map((r: any) => r.numero)
+  return { todos: [...orcamentos, ...locacoes], locacoes }
+}
+
+/**
+ * Gera o numero de um contrato de locacao: LOC-YYYY-NNNN
+ *
+ * Quando nasce de um orcamento, HERDA o sequencial dele (ORC-0012 ->
+ * LOC-2026-0012), para que o mesmo negocio carregue o mesmo numero do
+ * orcamento ao contrato. Contrato avulso consome o proximo sequencial livre.
+ *
+ * O contador olha o MAIOR numero ja emitido, nunca a contagem de linhas:
+ * apagar um registro nao pode liberar um numero que ja circulou assinado.
+ */
+export async function gerarNumeroLocacao(numeroOrcamento?: string | null): Promise<string> {
   const ano = new Date().getFullYear()
-  const { count } = await supabase
-    .from('locacoes')
-    .select('*', { count: 'exact', head: true })
-  return `LOC-${ano}-${String((count || 0) + 1).padStart(3, '0')}`
+  const { todos, locacoes } = await buscarNumerosEmitidos()
+
+  // Herda o numero do orcamento de origem, se ele ainda estiver livre
+  const herdado = numeroLocacaoDoOrcamento(numeroOrcamento, ano)
+  if (herdado) {
+    const seqHerdado = extrairSequencial(herdado)
+    const jaUsado = locacoes.some((n) => extrairSequencial(n) === seqHerdado)
+    if (!jaUsado) return herdado
+  }
+
+  return formatarNumeroLocacao(proximoSequencial(todos), ano)
 }
 
 /**
@@ -182,8 +217,8 @@ export async function criarLocacaoDoOrcamento(orcamento: any): Promise<{ success
       }
     }
 
-    // Gerar numero
-    const numero = await gerarNumeroLocacao()
+    // Gerar numero herdando o sequencial do orcamento de origem
+    const numero = await gerarNumeroLocacao(orcamento.numero_orcamento)
 
     // Calcular status baseado na data
     const hoje = new Date().toISOString().split('T')[0]

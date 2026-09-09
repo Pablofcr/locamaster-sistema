@@ -75,7 +75,20 @@ export default function OrcamentosPage() {
 
       if (error) throw error
 
-      setOrcamentos(data || [])
+      // Contrato gerado a partir de cada orcamento, para o link de rastreio
+      const ids = (data || []).map((o: any) => o.id)
+      const mapaContrato: Record<number, string> = {}
+      if (ids.length > 0) {
+        const { data: locs } = await supabase
+          .from('locacoes')
+          .select('numero, orcamento_id')
+          .in('orcamento_id', ids)
+        for (const l of locs || []) {
+          if (l.orcamento_id && l.numero) mapaContrato[l.orcamento_id] = l.numero
+        }
+      }
+
+      setOrcamentos((data || []).map((o: any) => ({ ...o, numero_contrato: mapaContrato[o.id] || null })))
       setTotalCount(count || 0)
       setTotalPages(Math.ceil((count || 0) / ITEMS_PER_PAGE))
     } catch (error) {
@@ -316,6 +329,11 @@ export default function OrcamentosPage() {
                       <div className="flex items-center gap-3 mb-2">
                         <h3 className="font-semibold text-gray-900">{orc.numero_orcamento || `#${orc.id}`}</h3>
                         {getStatusBadge(orc.status)}
+                        {orc.numero_contrato && (
+                          <span className="text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-700">
+                            {orc.numero_contrato}
+                          </span>
+                        )}
                       </div>
                       <div className="text-sm text-gray-600 space-y-1">
                         <div><span className="font-medium">Cliente:</span> {orc.cliente_nome}</div>

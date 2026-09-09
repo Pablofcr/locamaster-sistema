@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/Toast'
 import { supabase } from '@/lib/supabase'
 import { gerarPDFOrcamento } from '@/lib/gerarPDFOrcamento'
 import { verificarDisponibilidade, DisponibilidadeEquipamento } from '@/lib/verificarDisponibilidade'
+import { formatarNumeroOrcamento, proximoSequencial } from '@/lib/numeracao'
 import { useEmpresa } from '@/contexts/EmpresaContext'
 import { useRouter } from 'next/navigation'
 
@@ -127,14 +128,21 @@ export default function NovoOrcamentoPage() {
   const carregarDadosIniciais = async () => {
     setLoading(true)
     try {
-      const [clientesRes, equipRes, countRes] = await Promise.all([
+      const [clientesRes, equipRes, orcNumRes, locNumRes] = await Promise.all([
         supabase.from('clientes').select('*').order('nome'),
         supabase.from('equipamentos').select('*').eq('ativo', true).order('nome'),
-        supabase.from('orcamentos').select('*', { count: 'exact', head: true })
+        supabase.from('orcamentos').select('numero_orcamento'),
+        supabase.from('locacoes').select('numero')
       ])
       if (clientesRes.data) setClientes(clientesRes.data)
       if (equipRes.data) setEquipamentos(equipRes.data)
-      setNumeroOrcamento(`ORC-${String((countRes.count || 0) + 1).padStart(4, '0')}`)
+      // Sequencial unico entre orcamentos e contratos, baseado no maior numero
+      // ja emitido — apagar um registro nao libera um numero ja usado.
+      const numerosEmitidos = [
+        ...(orcNumRes.data || []).map((r: any) => r.numero_orcamento),
+        ...(locNumRes.data || []).map((r: any) => r.numero)
+      ]
+      setNumeroOrcamento(formatarNumeroOrcamento(proximoSequencial(numerosEmitidos)))
     } catch (error) {
       showToast('Erro ao carregar dados iniciais', 'error')
     } finally {

@@ -11,6 +11,7 @@ import { verificarDisponibilidade, gerarNumeroLocacao } from '@/lib/verificarDis
 import { gerarContratoLocacao } from '@/lib/gerarContratoLocacao'
 import { useEmpresa } from '@/contexts/EmpresaContext'
 import { gerarFatura } from '@/lib/faturamento'
+import { formatarNumeroRenovacao, numeroCorrespondeBusca } from '@/lib/numeracao'
 
 export default function LocacoesPage() {
   const { showToast } = useToast()
@@ -65,15 +66,23 @@ export default function LocacoesPage() {
   const carregarDados = async () => {
     setLoading(true)
     try {
-      const [locRes, cliRes, eqRes] = await Promise.all([
+      const [locRes, cliRes, eqRes, orcRes] = await Promise.all([
         supabase.from('locacoes').select('*').order('created_at', { ascending: false }),
         supabase.from('clientes').select('id, nome').order('nome'),
-        supabase.from('equipamentos').select('*').eq('ativo', true).order('nome')
+        supabase.from('equipamentos').select('*').eq('ativo', true).order('nome'),
+        supabase.from('orcamentos').select('id, numero_orcamento')
       ])
+
+      // Numero do orcamento de origem, para exibir e permitir busca cruzada
+      const mapaOrcamento: Record<number, string> = {}
+      for (const orc of orcRes.data || []) {
+        if (orc.numero_orcamento) mapaOrcamento[orc.id] = orc.numero_orcamento
+      }
 
       const data = (locRes.data || []).map(loc => ({
         ...loc,
-        status_calculado: calcularStatusDinamico(loc)
+        status_calculado: calcularStatusDinamico(loc),
+        numero_orcamento: loc.orcamento_id ? mapaOrcamento[loc.orcamento_id] || null : null
       }))
       setLocacoes(data)
       setClientes(cliRes.data || [])
@@ -165,7 +174,7 @@ export default function LocacoesPage() {
     }
     try {
       const cliente = clientes.find(c => c.id === parseInt(formClienteId))
-      const numero = await gerarNumeroLocacao()
+      const numero = await gerarNumeroLocacao(null)
       const hoje = new Date().toISOString().split('T')[0]
       const status = formDataInicio <= hoje ? 'ativo' : 'pendente'
       const d1 = new Date(formDataInicio)
@@ -720,7 +729,8 @@ export default function LocacoesPage() {
   // ---- FILTRO ----
   const locacoesFiltradas = locacoes.filter(l => {
     const matchSearch = !searchTerm ||
-      (l.numero || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      numeroCorrespondeBusca(l.numero, searchTerm) ||
+      numeroCorrespondeBusca(l.numero_orcamento, searchTerm) ||
       (l.cliente_nome || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (l.equipamento_nome || '').toLowerCase().includes(searchTerm.toLowerCase())
     const matchStatus = filtroStatus === 'todos' || l.status_calculado === filtroStatus
@@ -808,7 +818,7 @@ export default function LocacoesPage() {
                             )}
                             {loc.orcamento_id && (
                               <span className="text-xs px-2 py-0.5 rounded bg-purple-50 text-purple-700">
-                                Orc. #{loc.orcamento_id}
+                                {loc.numero_orcamento || `Orc. #${loc.orcamento_id}`}
                               </span>
                             )}
                           </div>
@@ -902,7 +912,7 @@ export default function LocacoesPage() {
                             }
                           }
 
-                          const gerarContratoRenovacao = async (dataInicioRenov: string, dataFimRenov: string) => {
+                          const gerarContratoRenovacao = async (dataInicioRenov: string, dataFimRenov: string, indiceRenov: number) => {
                             try {
                               const { data: cliente } = await supabase.from('clientes').select('*').eq('id', loc.cliente_id).single()
                               const itensLoc = getItensLocacao(loc)
@@ -913,7 +923,7 @@ export default function LocacoesPage() {
                                 ? [cliente.logradouro, cliente.numero, cliente.complemento, cliente.bairro, cliente.cidade, cliente.estado, cliente.cep].filter(Boolean).join(', ')
                                 : ''
                               gerarContratoLocacao({
-                                numeroOrcamento: loc.numero || `LOC-${loc.id}`,
+                                numeroOrcamento: formatarNumeroRenovacao(loc.numero || `LOC-${loc.id}`, indiceRenov),
                                 empresaNome: empresa?.nome_fantasia || empresa?.razao_social || '',
                                 empresaRazaoSocial: empresa?.razao_social || '',
                                 empresaCnpj: empresa?.cnpj || '',
@@ -952,6 +962,9 @@ export default function LocacoesPage() {
                                 {hist.map((h: any, i: number) => (
                                   <div key={i} className="text-xs bg-white p-2 rounded border flex items-center justify-between">
                                     <div>
+                                      <span className="font-semibold text-gray-900 mr-2">
+                                        {formatarNumeroRenovacao(loc.numero || `LOC-${loc.id}`, i + 1)}
+                                      </span>
                                       <span className="text-gray-500">{new Date(h.data).toLocaleDateString('pt-BR')}</span>
                                       {' - Periodo anterior: '}
                                       {h.periodo_anterior?.data_inicio ? new Date(h.periodo_anterior.data_inicio + 'T12:00:00').toLocaleDateString('pt-BR') : '-'} a{' '}
@@ -960,7 +973,7 @@ export default function LocacoesPage() {
                                       {h.itens_adicionados?.length > 0 && <span className="text-green-600 ml-2">Adicionados: {h.itens_adicionados.join(', ')}</span>}
                                     </div>
                                     {periodosRenov[i] && (
-                                      <Button size="sm" variant="outline" onClick={() => gerarContratoRenovacao(periodosRenov[i].data_inicio, periodosRenov[i].data_fim)}>
+                                      <Button size="sm" variant="outline" onClick={() => gerarContratoRenovacao(periodosRenov[i].data_inicio, periodosRenov[i].data_fim, i + 1)}>
                                         Gerar Contrato
                                       </Button>
                                     )}

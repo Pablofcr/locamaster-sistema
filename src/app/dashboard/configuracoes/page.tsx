@@ -17,7 +17,7 @@ export default function ConfiguracoesPage() {
 
   const [sistemaData, setSistemaData] = useState({
     notificacoesEmail: true, whatsappAutomatico: false, backupAutomatico: true,
-    formatoOrcamento: 'ORC-YYYY-NNN', formatoLocacao: 'LOC-YYYY-NNN', formatoFatura: 'FAT-YYYY-NNN'
+    formatoOrcamento: 'ORC-NNNN', formatoLocacao: 'LOC-YYYY-NNNN', formatoFatura: 'FAT-YYYY-NNN'
   })
 
   const salvarSistema = () => {
