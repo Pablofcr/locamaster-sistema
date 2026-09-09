@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { formatarMoeda, formatarData } from './faturamento'
+import { hojeISO } from '@/lib/data'
 
 // ============ CARREGAR REGRAS ============
 
@@ -60,7 +61,7 @@ export async function executarReguaCobranca() {
   const config = configArr?.[0]
 
   // Verificar cobranças já realizadas hoje
-  const hoje = new Date().toISOString().split('T')[0]
+  const hoje = hojeISO()
   const { data: logsHoje } = await supabase
     .from('cobranca_log')
     .select('fatura_id, regra_id')

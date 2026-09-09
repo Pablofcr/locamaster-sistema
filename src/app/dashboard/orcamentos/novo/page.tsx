@@ -12,6 +12,7 @@ import { verificarDisponibilidade, DisponibilidadeEquipamento } from '@/lib/veri
 import { formatarNumeroOrcamento, proximoSequencial } from '@/lib/numeracao'
 import { useEmpresa } from '@/contexts/EmpresaContext'
 import { useRouter } from 'next/navigation'
+import { hojeISO, hojeMaisDias } from '@/lib/data'
 
 interface Cliente {
   id: number
@@ -114,8 +115,8 @@ export default function NovoOrcamentoPage() {
     setCarregandoDisponibilidade(true)
     try {
       // Se nao tem datas definidas, usa hoje + 30 dias como referencia
-      const inicio = dataInicio || new Date().toISOString().split('T')[0]
-      const fim = dataFim || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]
+      const inicio = dataInicio || hojeISO()
+      const fim = dataFim || hojeMaisDias(30)
       const mapa = await verificarDisponibilidade(inicio, fim)
       setDisponibilidadeMap(mapa)
     } catch (err) {
@@ -247,8 +248,8 @@ export default function NovoOrcamentoPage() {
         cliente_telefone: cliente.telefone || cliente.contato || '',
         cliente_email: cliente.email || '',
         status: 'rascunho',
-        data_orcamento: new Date().toISOString().split('T')[0],
-        data_validade: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+        data_orcamento: hojeISO(),
+        data_validade: hojeMaisDias(30),
         modalidade_locacao: modalidadeLocacao,
         data_inicio_locacao: dataInicio || null,
         data_fim_locacao: dataFim || null,

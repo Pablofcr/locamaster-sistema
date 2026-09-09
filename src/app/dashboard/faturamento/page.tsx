@@ -31,6 +31,7 @@ import {
 } from '@/lib/cobranca'
 import { gerarPDFFatura } from '@/lib/gerarPDFFatura'
 import { useEmpresa } from '@/contexts/EmpresaContext'
+import { hojeISO } from '@/lib/data'
 
 type TabType = 'dashboard' | 'faturas' | 'gerar' | 'cobranca' | 'relatorios'
 
@@ -209,17 +210,6 @@ export default function FaturamentoPage() {
     } else {
       setSelectedFaturas(new Set(faturasPaginadas.map(f => f.id)))
     }
-  }
-
-  /**
-   * Data de hoje no fuso local, como YYYY-MM-DD.
-   *
-   * toISOString() devolve UTC: no horario de Brasilia (UTC-3), depois das 21h
-   * ele ja retorna o dia seguinte, o que faria a baixa cair no dia errado.
-   */
-  const hojeISO = () => {
-    const d = new Date()
-    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0]
   }
 
   /** Faturas da selecao que ainda podem receber baixa. */

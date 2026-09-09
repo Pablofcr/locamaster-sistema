@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { hojeISO } from '@/lib/data'
 
 // ============ HELPERS ============
 
@@ -231,7 +232,7 @@ export async function gerarFatura(params: {
     cliente_email: cliente?.email || '',
     locacao_id: params.locacao_id,
     locacao_numero: locacao.numero,
-    data_emissao: new Date().toISOString().split('T')[0],
+    data_emissao: hojeISO(),
     data_vencimento: params.data_vencimento,
     valor: params.valor,
     valor_original: params.valor,
@@ -417,7 +418,7 @@ export async function gerarFaturaUnificada(periodoReferencia: string, locacaoIds
     cliente_email: cliente?.email || '',
     locacao_id: primeiraLocacao.id,
     locacao_numero: locacaoNumeros,
-    data_emissao: new Date().toISOString().split('T')[0],
+    data_emissao: hojeISO(),
     data_vencimento: dataVencStr,
     valor: valorTotal,
     valor_original: valorTotal,
@@ -489,7 +490,7 @@ export async function gerarParcelas(params: {
 // ============ ATUALIZAR FATURAS VENCIDAS ============
 
 export async function atualizarFaturasVencidas() {
-  const hoje = new Date().toISOString().split('T')[0]
+  const hoje = hojeISO()
 
   const { data, error } = await supabase
     .from('faturas')

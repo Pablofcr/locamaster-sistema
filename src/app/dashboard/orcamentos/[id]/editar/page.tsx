@@ -11,6 +11,7 @@ import { gerarPDFOrcamento } from '@/lib/gerarPDFOrcamento'
 import { verificarDisponibilidade, DisponibilidadeEquipamento } from '@/lib/verificarDisponibilidade'
 import { useEmpresa } from '@/contexts/EmpresaContext'
 import { useRouter, useParams } from 'next/navigation'
+import { hojeISO, hojeMaisDias } from '@/lib/data'
 
 interface Cliente {
   id: number
@@ -182,8 +183,8 @@ export default function EditarOrcamentoPage() {
   const carregarDisponibilidade = async () => {
     setCarregandoDisponibilidade(true)
     try {
-      const inicio = dataInicio || new Date().toISOString().split('T')[0]
-      const fim = dataFim || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]
+      const inicio = dataInicio || hojeISO()
+      const fim = dataFim || hojeMaisDias(30)
       const mapa = await verificarDisponibilidade(inicio, fim, undefined, parseInt(id))
       setDisponibilidadeMap(mapa)
     } catch (err) {

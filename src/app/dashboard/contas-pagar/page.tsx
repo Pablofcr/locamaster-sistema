@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/components/ui/Toast'
 import { supabase } from '@/lib/supabase'
+import { hojeISO } from '@/lib/data'
 
 const CATEGORIAS = [
   { value: 'aluguel', label: 'Aluguel / Locacao' },
@@ -70,7 +71,7 @@ export default function ContasPagarPage() {
   const [showPagamento, setShowPagamento] = useState(false)
   const [contaPagando, setContaPagando] = useState<ContaPagar | null>(null)
   const [pagValor, setPagValor] = useState('')
-  const [pagData, setPagData] = useState(() => new Date().toISOString().split('T')[0])
+  const [pagData, setPagData] = useState(() => hojeISO())
   const [pagForma, setPagForma] = useState('')
   const [pagObs, setPagObs] = useState('')
   const [processandoPag, setProcessandoPag] = useState(false)
@@ -81,7 +82,7 @@ export default function ContasPagarPage() {
     categoria: 'outros',
     fornecedor_id: '',
     valor: '',
-    data_emissao: new Date().toISOString().split('T')[0],
+    data_emissao: hojeISO(),
     data_vencimento: '',
     numero_documento: '',
     numero_nota_fiscal: '',
@@ -249,7 +250,7 @@ export default function ContasPagarPage() {
   }
 
   const getStatusBadge = (conta: ContaPagar) => {
-    const hoje = new Date().toISOString().split('T')[0]
+    const hoje = hojeISO()
     let status = conta.status
 
     if ((status === 'pendente') && conta.data_vencimento < hoje) {
@@ -286,7 +287,7 @@ export default function ContasPagarPage() {
   })
 
   // Estatisticas
-  const hoje = new Date().toISOString().split('T')[0]
+  const hoje = hojeISO()
   const totalPendente = contas.filter(c => c.status === 'pendente' || c.status === 'vencido').reduce((s, c) => s + (Number(c.valor) - Number(c.valor_pago || 0)), 0)
   const totalVencido = contas.filter(c => (c.status === 'pendente' || c.status === 'vencido') && c.data_vencimento < hoje).reduce((s, c) => s + (Number(c.valor) - Number(c.valor_pago || 0)), 0)
   const totalPagoMes = (() => {
@@ -304,7 +305,7 @@ export default function ContasPagarPage() {
       categoria: 'outros',
       fornecedor_id: '',
       valor: '',
-      data_emissao: new Date().toISOString().split('T')[0],
+      data_emissao: hojeISO(),
       data_vencimento: '',
       numero_documento: '',
       numero_nota_fiscal: '',
@@ -324,7 +325,7 @@ export default function ContasPagarPage() {
       categoria: conta.categoria,
       fornecedor_id: conta.fornecedor_id ? String(conta.fornecedor_id) : '',
       valor: String(conta.valor),
-      data_emissao: conta.data_emissao || new Date().toISOString().split('T')[0],
+      data_emissao: conta.data_emissao || hojeISO(),
       data_vencimento: conta.data_vencimento,
       numero_documento: conta.numero_documento || '',
       numero_nota_fiscal: conta.numero_nota_fiscal || '',
@@ -444,7 +445,7 @@ export default function ContasPagarPage() {
     setContaPagando(conta)
     const saldo = Number(conta.valor) - Number(conta.valor_pago || 0)
     setPagValor(String(saldo))
-    setPagData(new Date().toISOString().split('T')[0])
+    setPagData(hojeISO())
     setPagForma('')
     setPagObs('')
     setShowPagamento(true)

@@ -13,6 +13,7 @@ import {
   simularDistribuicao,
   distribuirPagamento,
 } from '@/lib/faturamento'
+import { hojeISO } from '@/lib/data'
 
 interface ClienteComFaturas {
   id: number
@@ -45,7 +46,7 @@ export default function RecebimentosPage() {
   const [faturas, setFaturas] = useState<any[]>([])
   const [loadingFaturas, setLoadingFaturas] = useState(false)
   const [valorRecebido, setValorRecebido] = useState('')
-  const [dataPagamento, setDataPagamento] = useState(new Date().toISOString().split('T')[0])
+  const [dataPagamento, setDataPagamento] = useState(hojeISO())
   const [formaPagamento, setFormaPagamento] = useState('')
   const [observacoes, setObservacoes] = useState('')
   const [preview, setPreview] = useState<ReturnType<typeof simularDistribuicao> | null>(null)

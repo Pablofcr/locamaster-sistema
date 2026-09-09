@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
 import { supabase } from '@/lib/supabase'
+import { hojeISO } from '@/lib/data'
 
 interface Classe {
   id: number
@@ -265,7 +266,7 @@ export default function NovoEquipamentoPage() {
             fornecedor_id: form.fornecedor_id ? parseInt(form.fornecedor_id) : null,
             fornecedor_nome: fornecedor?.nome || null,
             valor: valorAquisicao,
-            data_emissao: form.data_aquisicao || new Date().toISOString().split('T')[0],
+            data_emissao: form.data_aquisicao || hojeISO(),
             data_vencimento: form.data_vencimento_primeira_parcela,
             numero_nota_fiscal: form.numero_nota_fiscal.trim() || null,
             parcela_numero: 1,
@@ -290,7 +291,7 @@ export default function NovoEquipamentoPage() {
               valor: i === numParcelas - 1
                 ? Math.round((valorAquisicao - valorParcela * (numParcelas - 1)) * 100) / 100
                 : valorParcela,
-              data_emissao: form.data_aquisicao || new Date().toISOString().split('T')[0],
+              data_emissao: form.data_aquisicao || hojeISO(),
               data_vencimento: dataVenc.toISOString().split('T')[0],
               numero_nota_fiscal: form.numero_nota_fiscal.trim() || null,
               parcela_numero: i + 1,

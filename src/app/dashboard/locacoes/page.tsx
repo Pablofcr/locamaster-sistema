@@ -12,6 +12,7 @@ import { gerarContratoLocacao } from '@/lib/gerarContratoLocacao'
 import { useEmpresa } from '@/contexts/EmpresaContext'
 import { gerarFatura } from '@/lib/faturamento'
 import { formatarNumeroRenovacao, numeroCorrespondeBusca } from '@/lib/numeracao'
+import { hojeISO } from '@/lib/data'
 
 export default function LocacoesPage() {
   const { showToast } = useToast()
@@ -57,7 +58,7 @@ export default function LocacoesPage() {
 
   const calcularStatusDinamico = (loc: any) => {
     if (loc.status === 'finalizado' || loc.status === 'cancelado') return loc.status
-    const hoje = new Date().toISOString().split('T')[0]
+    const hoje = hojeISO()
     if (loc.data_fim && loc.data_fim < hoje) return 'vencido'
     if (loc.data_inicio && loc.data_inicio <= hoje) return 'ativo'
     return 'pendente'
@@ -175,7 +176,7 @@ export default function LocacoesPage() {
     try {
       const cliente = clientes.find(c => c.id === parseInt(formClienteId))
       const numero = await gerarNumeroLocacao(null)
-      const hoje = new Date().toISOString().split('T')[0]
+      const hoje = hojeISO()
       const status = formDataInicio <= hoje ? 'ativo' : 'pendente'
       const d1 = new Date(formDataInicio)
       const d2 = new Date(formDataFim)
@@ -272,7 +273,7 @@ export default function LocacoesPage() {
   // ---- DEVOLUCAO ----
   const abrirDevolucao = async (loc: any) => {
     const itens = getItensLocacao(loc)
-    const hoje = new Date().toISOString().split('T')[0]
+    const hoje = hojeISO()
 
     // Buscar data de vencimento da última fatura da locação
     let dataVencPadrao = hoje
@@ -374,7 +375,7 @@ export default function LocacoesPage() {
             const valorAquisicao = Number(eqData.valor_aquisicao_unitario) || 0
             if (valorAquisicao > 0) {
               const valorIndenizacao = item.valor_indenizacao > 0 ? item.valor_indenizacao : Math.round(valorAquisicao * 2 * 100) / 100
-              const hoje = new Date().toISOString().split('T')[0]
+              const hoje = hojeISO()
               const vencimentoIndenizacao = item.data_vencimento_indenizacao || ultimaDataVencimento || hoje
               try {
                 const faturaGerada = await gerarFatura({
@@ -461,7 +462,7 @@ export default function LocacoesPage() {
             const valorAquisicao = Number(eqData.valor_aquisicao_unitario) || 0
             if (valorAquisicao > 0) {
               const valorIndenizacao = item.valor_indenizacao > 0 ? item.valor_indenizacao : Math.round(valorAquisicao * 2 * 100) / 100
-              const hoje = new Date().toISOString().split('T')[0]
+              const hoje = hojeISO()
               const vencimentoIndenizacao = item.data_vencimento_indenizacao || ultimaDataVencimento || hoje
               try {
                 const faturaGerada = await gerarFatura({
@@ -1326,7 +1327,7 @@ export default function LocacoesPage() {
                                   const novos = [...itensDevolucao]
                                   const eq = equipamentos.find((e: any) => e.id === item.equipamento_id)
                                   const valorAquisicao = Number(eq?.valor_aquisicao_unitario) || 0
-                                  novos[idx] = { ...novos[idx], tem_avaria: true, grau_avaria: 'grave', cobrar_indenizacao: true, valor_indenizacao: Math.round(valorAquisicao * 2 * 100) / 100, data_vencimento_indenizacao: ultimaDataVencimento || new Date().toISOString().split('T')[0] }
+                                  novos[idx] = { ...novos[idx], tem_avaria: true, grau_avaria: 'grave', cobrar_indenizacao: true, valor_indenizacao: Math.round(valorAquisicao * 2 * 100) / 100, data_vencimento_indenizacao: ultimaDataVencimento || hojeISO() }
                                   setItensDevolucao(novos)
                                 }}
                                 className="w-4 h-4"
@@ -1342,7 +1343,7 @@ export default function LocacoesPage() {
                                   const novos = [...itensDevolucao]
                                   const eq = equipamentos.find((e: any) => e.id === item.equipamento_id)
                                   const valorAquisicao = Number(eq?.valor_aquisicao_unitario) || 0
-                                  novos[idx] = { ...novos[idx], tem_avaria: true, grau_avaria: 'furto_roubo', valor_indenizacao: Math.round(valorAquisicao * 2 * 100) / 100, data_vencimento_indenizacao: ultimaDataVencimento || new Date().toISOString().split('T')[0] }
+                                  novos[idx] = { ...novos[idx], tem_avaria: true, grau_avaria: 'furto_roubo', valor_indenizacao: Math.round(valorAquisicao * 2 * 100) / 100, data_vencimento_indenizacao: ultimaDataVencimento || hojeISO() }
                                   setItensDevolucao(novos)
                                 }}
                                 className="w-4 h-4"
@@ -1384,7 +1385,7 @@ export default function LocacoesPage() {
                                     ...novos[idx],
                                     cobrar_indenizacao: e.target.checked,
                                     valor_indenizacao: e.target.checked ? Math.round(valorAquisicao * 2 * 100) / 100 : 0,
-                                    data_vencimento_indenizacao: e.target.checked ? (ultimaDataVencimento || new Date().toISOString().split('T')[0]) : ''
+                                    data_vencimento_indenizacao: e.target.checked ? (ultimaDataVencimento || hojeISO()) : ''
                                   }
                                   setItensDevolucao(novos)
                                 }}
@@ -1416,7 +1417,7 @@ export default function LocacoesPage() {
                                     <label className="text-xs font-normal text-orange-800">Vencimento da indenizacao:</label>
                                     <input
                                       type="date"
-                                      value={item.data_vencimento_indenizacao || ultimaDataVencimento || new Date().toISOString().split('T')[0]}
+                                      value={item.data_vencimento_indenizacao || ultimaDataVencimento || hojeISO()}
                                       onChange={(e) => {
                                         const novos = [...itensDevolucao]
                                         novos[idx] = { ...novos[idx], data_vencimento_indenizacao: e.target.value }
@@ -1485,7 +1486,7 @@ export default function LocacoesPage() {
                                   <label className="text-xs font-normal text-red-800">Vencimento da indenizacao:</label>
                                   <input
                                     type="date"
-                                    value={item.data_vencimento_indenizacao || ultimaDataVencimento || new Date().toISOString().split('T')[0]}
+                                    value={item.data_vencimento_indenizacao || ultimaDataVencimento || hojeISO()}
                                     onChange={(e) => {
                                       const novos = [...itensDevolucao]
                                       novos[itemIdx] = { ...novos[itemIdx], data_vencimento_indenizacao: e.target.value }
@@ -1538,7 +1539,7 @@ export default function LocacoesPage() {
                                   <label className="text-xs font-normal text-red-800">Vencimento da indenizacao:</label>
                                   <input
                                     type="date"
-                                    value={item.data_vencimento_indenizacao || ultimaDataVencimento || new Date().toISOString().split('T')[0]}
+                                    value={item.data_vencimento_indenizacao || ultimaDataVencimento || hojeISO()}
                                     onChange={(e) => {
                                       const novos = [...itensDevolucao]
                                       novos[itemIdx] = { ...novos[itemIdx], data_vencimento_indenizacao: e.target.value }

@@ -12,6 +12,7 @@ import { formatarMoeda, formatarData, registrarPagamento, cancelarFatura, corrig
 import { obterLogCobranca, registrarAcaoManual, abrirWhatsApp, processarTemplate } from '@/lib/cobranca'
 import { gerarPDFFatura } from '@/lib/gerarPDFFatura'
 import { useEmpresa } from '@/contexts/EmpresaContext'
+import { hojeISO } from '@/lib/data'
 
 export default function FaturaDetalhePage() {
   const params = useParams()
@@ -35,7 +36,7 @@ export default function FaturaDetalhePage() {
 
   // Formulário pagamento
   const [pgForm, setPgForm] = useState({
-    valor: '', data_pagamento: new Date().toISOString().split('T')[0], forma_pagamento: '', observacoes: ''
+    valor: '', data_pagamento: hojeISO(), forma_pagamento: '', observacoes: ''
   })
 
   // Correcao da data de um pagamento ja lancado
@@ -136,7 +137,7 @@ export default function FaturaDetalhePage() {
       })
       showToast('Pagamento registrado!', 'success')
       setShowPagamento(false)
-      setPgForm({ valor: '', data_pagamento: new Date().toISOString().split('T')[0], forma_pagamento: '', observacoes: '' })
+      setPgForm({ valor: '', data_pagamento: hojeISO(), forma_pagamento: '', observacoes: '' })
       carregarFatura()
     } catch (err: any) { showToast('Erro: ' + err.message, 'error') }
   }

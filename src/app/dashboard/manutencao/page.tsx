@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/components/ui/Toast'
 import { supabase } from '@/lib/supabase'
+import { hojeISO } from '@/lib/data'
 
 export default function ManutencaoPage() {
   const { showToast } = useToast()
@@ -87,7 +88,7 @@ export default function ManutencaoPage() {
   const concluirManutencao = async (m: any) => {
     try {
       await supabase.from('manutencoes').update({
-        status: 'concluida', data_realizada: new Date().toISOString().split('T')[0],
+        status: 'concluida', data_realizada: hojeISO(),
         updated_at: new Date().toISOString()
       }).eq('id', m.id)
       if (m.equipamento_id) {

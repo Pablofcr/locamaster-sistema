@@ -5,6 +5,7 @@ import {
   numeroLocacaoDoOrcamento,
   proximoSequencial,
 } from '@/lib/numeracao'
+import { hojeISO } from '@/lib/data'
 
 export interface DisponibilidadeEquipamento {
   disponivel: boolean
@@ -221,7 +222,7 @@ export async function criarLocacaoDoOrcamento(orcamento: any): Promise<{ success
     const numero = await gerarNumeroLocacao(orcamento.numero_orcamento)
 
     // Calcular status baseado na data
-    const hoje = new Date().toISOString().split('T')[0]
+    const hoje = hojeISO()
     let status = 'pendente'
     if (orcamento.data_inicio_locacao && orcamento.data_inicio_locacao <= hoje) {
       status = 'ativo'

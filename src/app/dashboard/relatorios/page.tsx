@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
 import { supabase } from '@/lib/supabase'
+import { hojeISO } from '@/lib/data'
 
 export default function RelatoriosPage() {
   const { showToast } = useToast()
@@ -106,7 +107,7 @@ export default function RelatoriosPage() {
           doc.text(`Novos Clientes: ${stats.novosClientes}`, 20, y + 36)
       }
 
-      doc.save(`relatorio-${tipo}-${new Date().toISOString().split('T')[0]}.pdf`)
+      doc.save(`relatorio-${tipo}-${hojeISO()}.pdf`)
       showToast('Relatório gerado com sucesso!', 'success')
     } catch (error) {
       showToast('Erro ao gerar relatório PDF', 'error')
