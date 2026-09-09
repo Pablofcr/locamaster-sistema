@@ -107,16 +107,17 @@ export default function ConfiguracoesFaturamentoPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <button onClick={() => router.push('/dashboard/faturamento')}
-            className="text-sm text-blue-600 hover:underline mb-2 block">
-            ← Voltar ao Faturamento
-          </button>
           <h1 className="text-3xl font-bold text-gray-900">Configuracoes de Faturamento</h1>
           <p className="text-gray-600">Parametros globais para faturas e cobranças</p>
         </div>
-        <Button onClick={salvar} disabled={saving}>
-          {saving ? 'Salvando...' : 'Salvar Configuracoes'}
-        </Button>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button onClick={salvar} disabled={saving}>
+            {saving ? 'Salvando...' : 'Salvar Configuracoes'}
+          </Button>
+          <Button variant="outline" onClick={() => router.push('/dashboard/faturamento')}>
+            Voltar
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

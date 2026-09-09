@@ -264,10 +264,6 @@ export default function FaturaDetalhePage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <button onClick={() => router.push('/dashboard/faturamento')}
-            className="text-sm text-blue-600 hover:underline mb-2 block">
-            ← Voltar ao Faturamento
-          </button>
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-bold text-gray-900">{fatura.numero || `Fatura #${fatura.id}`}</h1>
             {fatura.tipo === 'indenizacao' && (
@@ -280,7 +276,7 @@ export default function FaturaDetalhePage() {
           </div>
           <p className="text-gray-600">{fatura.cliente_nome}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           <Button variant="outline" onClick={handleGerarPDF}>PDF</Button>
           {fatura.status !== 'pago' && fatura.status !== 'cancelado' && (
             <>
@@ -298,6 +294,9 @@ export default function FaturaDetalhePage() {
               abrirWhatsApp(fatura.cliente_telefone, msg)
             }}>WhatsApp</Button>
           )}
+          <Button variant="outline" onClick={() => router.push('/dashboard/faturamento')}>
+            Voltar
+          </Button>
         </div>
       </div>
 
