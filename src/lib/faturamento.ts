@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import { hojeISO } from '@/lib/data'
 import { proximoSequencial } from '@/lib/numeracao'
+import { valorFaturadoDoContrato, saldoAFaturar, FaturaDoPeriodo } from '@/lib/saldoFaturamento'
 
 // ============ HELPERS ============
 
@@ -153,6 +154,34 @@ export function calcularValorMedicao(locacao: any, periodoReferencia: string): n
   return Math.round(valorTotal * 100) / 100
 }
 
+// ============ VALOR A FATURAR NO MES ============
+
+async function obterFaturasDoPeriodo(periodoReferencia: string): Promise<FaturaDoPeriodo[]> {
+  const { data } = await supabase
+    .from('faturas')
+    .select('locacao_id, locacao_numero, valor, valor_original, observacoes')
+    .eq('periodo_referencia', periodoReferencia)
+    .neq('status', 'cancelado')
+  return data || []
+}
+
+/**
+ * Quanto falta faturar do contrato no mes.
+ *
+ * Sem fatura no mes: a medicao inteira. Com fatura: so o saldo que ela nao
+ * cobriu — o caso do contrato renovado depois de o mes ser faturado, em que os
+ * dias do periodo novo ficaram de fora. valor 0 = nada a faturar.
+ */
+function calcularValorAFaturar(locacao: any, periodoReferencia: string, faturasDoPeriodo: FaturaDoPeriodo[]) {
+  const medicao = calcularValorMedicao(locacao, periodoReferencia)
+  const jaFaturado = valorFaturadoDoContrato(faturasDoPeriodo, locacao)
+
+  if (jaFaturado === 0) {
+    return { valor: medicao > 0 ? medicao : (Number(locacao.valor_total) || 0), jaFaturado, complemento: false }
+  }
+  return { valor: saldoAFaturar(medicao, jaFaturado), jaFaturado, complemento: true }
+}
+
 // ============ CALCULAR DATA VENCIMENTO POR CONDICAO ============
 
 export function calcularDataVencimentoPorCondicao(
@@ -303,40 +332,27 @@ export async function gerarFaturasLote(periodoReferencia: string, locacaoIds?: n
   const config = configArr?.[0]
   const diasVencimento = config?.dias_para_vencimento || 10
 
-  // Verificar faturas já geradas para este periodo
-  const { data: existentes } = await supabase
-    .from('faturas')
-    .select('locacao_id, locacao_numero')
-    .eq('periodo_referencia', periodoReferencia)
-    .neq('status', 'cancelado')
-
-  const locacoesJaFaturadas = new Set((existentes || []).map(f => f.locacao_id))
-  const numerosJaFaturados = new Set<string>()
-  ;(existentes || []).forEach(f => {
-    if (f.locacao_numero) {
-      f.locacao_numero.split(',').map((s: string) => s.trim()).filter(Boolean).forEach((n: string) => numerosJaFaturados.add(n))
-    }
-  })
+  const faturasDoPeriodo = await obterFaturasDoPeriodo(periodoReferencia)
 
   let geradas = 0
   const erros: string[] = []
 
   for (const locacao of locacoesFiltradas) {
-    if (locacoesJaFaturadas.has(locacao.id) || numerosJaFaturados.has(locacao.numero)) continue
+    const { valor, jaFaturado, complemento } = calcularValorAFaturar(locacao, periodoReferencia, faturasDoPeriodo)
+    if (complemento && valor <= 0) continue
 
     try {
       const diaFat = locacao.dia_faturamento || 1
       const condicao = locacao.condicao_pagamento || ''
       const dataVencStr = calcularDataVencimentoPorCondicao(periodoReferencia, condicao, diaFat, diasVencimento)
 
-      const valorMedicao = calcularValorMedicao(locacao, periodoReferencia)
-
       await gerarFatura({
         locacao_id: locacao.id,
-        valor: valorMedicao > 0 ? valorMedicao : (Number(locacao.valor_total) || 0),
+        valor,
         data_vencimento: dataVencStr,
         tipo: 'recorrente',
         periodo_referencia: periodoReferencia,
+        observacoes: complemento ? `Complemento da medicao do mes (ja faturado ${formatarMoeda(jaFaturado)})` : '',
         gerada_automaticamente: true,
       })
       geradas++
@@ -369,21 +385,12 @@ export async function gerarFaturaUnificada(periodoReferencia: string, locacaoIds
     return { gerada: false, erros: ['Locacoes de clientes diferentes nao podem ser unificadas'] }
   }
 
-  // Verificar duplicatas (faturas ja existentes no periodo)
-  const { data: existentes } = await supabase
-    .from('faturas')
-    .select('locacao_id, locacao_numero')
-    .eq('periodo_referencia', periodoReferencia)
-    .neq('status', 'cancelado')
-
-  const jaFaturadas = new Set((existentes || []).map(f => f.locacao_id))
-  const numerosJaFaturados = new Set<string>()
-  ;(existentes || []).forEach(f => {
-    if (f.locacao_numero) {
-      f.locacao_numero.split(',').map((s: string) => s.trim()).filter(Boolean).forEach((n: string) => numerosJaFaturados.add(n))
-    }
-  })
-  const locacoesValidas = locacoes.filter(l => !jaFaturadas.has(l.id) && !numerosJaFaturados.has(l.numero))
+  // Evitar duplicatas: de contrato ja faturado no periodo, so o saldo que falta
+  const faturasDoPeriodo = await obterFaturasDoPeriodo(periodoReferencia)
+  const aFaturar = locacoes
+    .map(l => ({ locacao: l, ...calcularValorAFaturar(l, periodoReferencia, faturasDoPeriodo) }))
+    .filter(item => !item.complemento || item.valor > 0)
+  const locacoesValidas = aFaturar.map(item => item.locacao)
 
   if (locacoesValidas.length === 0) {
     return { gerada: false, erros: ['Todas as locacoes selecionadas ja foram faturadas neste periodo'] }
@@ -398,15 +405,14 @@ export async function gerarFaturaUnificada(periodoReferencia: string, locacaoIds
   const diasVencimento = config?.dias_para_vencimento || 10
 
   // Calcular valores individuais e total
-  const detalhes: { numero: string; valor: number }[] = []
+  const detalhes: { numero: string; valor: number; jaFaturado: number; complemento: boolean }[] = []
   let valorTotal = 0
 
-  for (const locacao of locacoesValidas) {
-    const valorMedicao = calcularValorMedicao(locacao, periodoReferencia)
-    const valor = valorMedicao > 0 ? valorMedicao : (Number(locacao.valor_total) || 0)
-    detalhes.push({ numero: locacao.numero, valor })
-    valorTotal += valor
+  for (const item of aFaturar) {
+    detalhes.push({ numero: item.locacao.numero, valor: item.valor, jaFaturado: item.jaFaturado, complemento: item.complemento })
+    valorTotal += item.valor
   }
+  valorTotal = Math.round(valorTotal * 100) / 100
 
   // Calcular data de vencimento baseado na condicao_pagamento da primeira locacao
   const primeiraLocacao = locacoesValidas[0]
@@ -416,7 +422,10 @@ export async function gerarFaturaUnificada(periodoReferencia: string, locacaoIds
 
   // Montar campos da fatura unificada
   const locacaoNumeros = locacoesValidas.map(l => l.numero).join(', ')
-  const observacoes = detalhes.map(d => `${d.numero}: ${formatarMoeda(d.valor)}`).join(' | ')
+  // O formato "NUMERO: R$ valor" e lido de volta por valorFaturadoDoContrato — nao mudar
+  const observacoes = detalhes
+    .map(d => `${d.numero}: ${formatarMoeda(d.valor)}${d.complemento ? ` (complemento da medicao do mes; ja faturado ${formatarMoeda(d.jaFaturado)})` : ''}`)
+    .join(' | ')
   const cliente = primeiraLocacao.clientes as any
 
   const numero = await gerarNumeroFatura()
@@ -828,25 +837,13 @@ export async function obterLocacoesElegiveis(periodoReferencia: string) {
     return true
   })
 
-  const { data: existentes } = await supabase
-    .from('faturas')
-    .select('locacao_id, locacao_numero')
-    .eq('periodo_referencia', periodoReferencia)
-    .neq('status', 'cancelado')
-
-  const jaFaturadas = new Set((existentes || []).map(f => f.locacao_id))
-  // Também verificar números de locação em faturas unificadas (campo locacao_numero com múltiplos valores)
-  const numerosJaFaturados = new Set<string>()
-  ;(existentes || []).forEach(f => {
-    if (f.locacao_numero) {
-      f.locacao_numero.split(',').map((s: string) => s.trim()).filter(Boolean).forEach((n: string) => numerosJaFaturados.add(n))
-    }
-  })
+  // Contrato ja faturado no periodo so volta se sobrou saldo (ex.: renovado depois da fatura)
+  const faturasDoPeriodo = await obterFaturasDoPeriodo(periodoReferencia)
 
   return vigentes
-    .filter(l => !jaFaturadas.has(l.id) && !numerosJaFaturados.has(l.numero))
-    .map(l => ({
-      ...l,
-      valor_medicao: calcularValorMedicao(l, periodoReferencia),
-    }))
+    .map(l => {
+      const { valor, jaFaturado, complemento } = calcularValorAFaturar(l, periodoReferencia, faturasDoPeriodo)
+      return { ...l, valor_medicao: valor, valor_ja_faturado: jaFaturado, complemento }
+    })
+    .filter(l => !l.complemento || l.valor_medicao > 0)
 }

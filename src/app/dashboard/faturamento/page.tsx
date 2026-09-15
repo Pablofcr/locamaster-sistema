@@ -943,7 +943,14 @@ export default function FaturamentoPage() {
                                 {l.data_inicio ? formatarData(l.data_inicio) : '-'} a {l.data_fim ? formatarData(l.data_fim) : 'Indefinido'}
                               </td>
                               <td className="p-3 text-right text-gray-500">{formatarMoeda(Number(l.valor_total))}</td>
-                              <td className="p-3 text-right font-medium text-green-700">{formatarMoeda(Number(l.valor_medicao || l.valor_total))}</td>
+                              <td className="p-3 text-right font-medium text-green-700">
+                                {formatarMoeda(Number(l.valor_medicao || l.valor_total))}
+                                {l.complemento && (
+                                  <div className="text-xs font-normal text-amber-700">
+                                    Complemento (ja faturado {formatarMoeda(Number(l.valor_ja_faturado))})
+                                  </div>
+                                )}
+                              </td>
                               <td className="p-3 text-center">
                                 <Badge variant={l.status === 'ativo' ? 'success' : 'default'}>
                                   {l.status === 'ativo' ? 'Ativa' : l.status}

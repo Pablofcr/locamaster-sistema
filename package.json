@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "verificar:numeracao": "node scripts/verificar-numeracao.js",
-    "verificar:data": "node scripts/verificar-data.js"
+    "verificar:data": "node scripts/verificar-data.js",
+    "verificar:saldo-faturamento": "node scripts/verificar-saldo-faturamento.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.86.0",
