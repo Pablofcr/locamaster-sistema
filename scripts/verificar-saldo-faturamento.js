@@ -79,9 +79,9 @@ eq('unificada: parte do segundo contrato',
   s.valorFaturadoDoContrato([unificada], { id: 2, numero: 'LOC-2026-002' }), 306.67)
 eq('unificada com espaco comum e milhar',
   s.valorFaturadoDoContrato([{ ...unificada, observacoes: 'LOC-2026-001: R$ 14.000,00 | LOC-2026-002: R$ 7.466,67' }], { id: 2, numero: 'LOC-2026-002' }), 7466.67)
-eq('unificada com complemento: le o valor antes da anotacao',
+eq('unificada com renovacao: le o valor antes da anotacao do periodo',
   s.valorFaturadoDoContrato([{ ...unificada, locacao_numero: 'LOC-2026-009, LOC-2026-010',
-    observacoes: `LOC-2026-009: R$${NBSP}4.080,00 (complemento da medicao do mes; ja faturado R$${NBSP}2.880,00) | LOC-2026-010: R$${NBSP}500,00` }], loc9), 4080)
+    observacoes: `LOC-2026-009: R$${NBSP}4.080,00 (Renovação 1 — período 13/08/2026 a 30/08/2026) | LOC-2026-010: R$${NBSP}500,00` }], loc9), 4080)
 eq('unificada sem a parte do contrato nas observacoes: considera ja faturado',
   s.valorFaturadoDoContrato([{ ...unificada, observacoes: 'editada pelo usuario' }], { id: 2, numero: 'LOC-2026-002' }), Infinity)
 
@@ -94,6 +94,65 @@ eq('centavo a menos na fatura nao reabre o mes', s.saldoAFaturar(2146.67, 2146.6
 eq('faturado a maior nao gera saldo negativo', s.saldoAFaturar(5000, 6000), 0)
 eq('parte desconhecida: sem saldo', s.saldoAFaturar(5000, Infinity), 0)
 eq('saldo sai em centavos exatos', s.saldoAFaturar(6960.01, 2880.3), 4079.71)
+
+// LOC-2026-009: contrato 13/07 a 12/08 a R$ 7.200, renovado 13/08 a 12/09 a R$ 6.800
+const periodos9 = [
+  { data_inicio: '2026-07-13', data_fim: '2026-08-12', valor_total: 7200 },
+  { data_inicio: '2026-08-13', data_fim: '2026-09-12', valor_total: 6800 },
+]
+const resumo = partes => partes.map(p => [p.rotulo, p.data_inicio, p.data_fim, p.dias, Math.round(p.valor * 100) / 100])
+
+console.log('\n--- partesDoMes ---')
+eq('julho: so o contrato original, dia 31 fora',
+  resumo(s.partesDoMes(periodos9, '2026-07')), [['Contrato original', '2026-07-13', '2026-07-30', 18, 4320]])
+eq('agosto: original e renovacao',
+  resumo(s.partesDoMes(periodos9, '2026-08')), [
+    ['Contrato original', '2026-08-01', '2026-08-12', 12, 2880],
+    ['Renovação 1', '2026-08-13', '2026-08-30', 18, 4080],
+  ])
+eq('setembro: so a renovacao',
+  resumo(s.partesDoMes(periodos9, '2026-09')), [['Renovação 1', '2026-09-01', '2026-09-12', 12, 2720]])
+eq('outubro: nada', resumo(s.partesDoMes(periodos9, '2026-10')), [])
+eq('fevereiro de 28 dias segue a regra atual (dias reais ate 30)',
+  resumo(s.partesDoMes([{ data_inicio: '2026-01-01', data_fim: '2026-12-31', valor_total: 3000 }], '2026-02')),
+  [['Contrato original', '2026-02-01', '2026-02-28', 28, 2800]])
+
+console.log('\n--- faturasDoContrato ---')
+eq('lista a parte do contrato em cada fatura',
+  s.faturasDoContrato([
+    { numero: 'FAT-2026-025', status: 'pago', locacao_id: 11, locacao_numero: 'LOC-2026-009', valor: 2500, valor_original: 2880 },
+    { numero: 'FAT-2026-030', status: 'emitido', locacao_id: 1, locacao_numero: 'LOC-2026-009, LOC-2026-010', valor: 4580, valor_original: 4580,
+      observacoes: `LOC-2026-009: R$${NBSP}4.080,00 (Renovação 1) | LOC-2026-010: R$${NBSP}500,00` },
+    { numero: 'FAT-2026-031', status: 'pago', locacao_id: 12, locacao_numero: 'LOC-2026-010', valor: 1, valor_original: 1 },
+  ], loc9),
+  [{ numero: 'FAT-2026-025', status: 'pago', valor: 2880 }, { numero: 'FAT-2026-030', status: 'emitido', valor: 4080 }])
+eq('parte desconhecida na unificada: null', s.faturasDoContrato([{ ...unificada, observacoes: '' }], { id: 1, numero: 'LOC-2026-001' }), null)
+
+console.log('\n--- comporMes ---')
+const partesAgo = s.partesDoMes(periodos9, '2026-08')
+eq('renovacao depois da fatura do original',
+  s.comporMes(partesAgo, [{ numero: 'FAT-2026-025', status: 'pago', valor: 2880 }], 4080), {
+    faturadas: [{ numero: 'FAT-2026-025', status: 'pago', valor: 2880, rotulo: 'Contrato original', data_inicio: '2026-08-01', data_fim: '2026-08-12' }],
+    pendente: { rotulo: 'Renovação 1', data_inicio: '2026-08-13', data_fim: '2026-08-30', valor: 4080 },
+  })
+eq('fatura que cobriu o original e parte da renovacao',
+  s.comporMes(partesAgo, [{ numero: 'FAT-X', status: 'emitido', valor: 4013.33 }], 2946.67), {
+    faturadas: [{ numero: 'FAT-X', status: 'emitido', valor: 4013.33, rotulo: 'Contrato original + Renovação 1', data_inicio: '2026-08-01', data_fim: '2026-08-17' }],
+    pendente: { rotulo: 'Renovação 1', data_inicio: '2026-08-18', data_fim: '2026-08-30', valor: 2946.67 },
+  })
+eq('duas faturas em sequencia, mes fechado',
+  s.comporMes(partesAgo, [
+    { numero: 'FAT-A', status: 'pago', valor: 2880 },
+    { numero: 'FAT-B', status: 'vencido', valor: 4080 },
+  ], 0), {
+    faturadas: [
+      { numero: 'FAT-A', status: 'pago', valor: 2880, rotulo: 'Contrato original', data_inicio: '2026-08-01', data_fim: '2026-08-12' },
+      { numero: 'FAT-B', status: 'vencido', valor: 4080, rotulo: 'Renovação 1', data_inicio: '2026-08-13', data_fim: '2026-08-30' },
+    ],
+    pendente: null,
+  })
+eq('arredondamento de centavo nao cria um dia a mais',
+  s.comporMes(partesAgo, [{ numero: 'FAT-A', status: 'pago', valor: 2879.99 }], 4080).faturadas[0].data_fim, '2026-08-12')
 
 console.log(falhas === 0 ? '\nTudo certo.' : `\n${falhas} verificacao(oes) falharam.`)
 process.exit(falhas === 0 ? 0 : 1)

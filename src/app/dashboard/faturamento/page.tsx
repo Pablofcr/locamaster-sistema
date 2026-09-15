@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -928,7 +928,23 @@ export default function FaturamentoPage() {
                         </thead>
                         <tbody className="divide-y">
                           {locacoesElegiveis.map(l => (
-                            <tr key={l.id} className={`hover:bg-gray-50 transition-colors ${locacoesSelecionadas.has(l.id) ? 'bg-blue-50' : ''}`}>
+                            <Fragment key={l.id}>
+                            {/* Faturas ja emitidas no mes para o contrato: so consulta, em cinza */}
+                            {(l.composicao?.faturadas || []).map((f: any, i: number) => (
+                              <tr key={`${l.id}-faturada-${i}`} className="bg-gray-100 text-gray-400">
+                                <td className="p-3"></td>
+                                <td className="p-3 font-medium">{l.numero}</td>
+                                <td className="p-3">{l.cliente_nome}</td>
+                                <td className="p-3 text-xs">
+                                  <div className="font-medium">{f.rotulo || 'Fatura do mes'}{f.data_inicio && ` · ${formatarData(f.data_inicio)} a ${formatarData(f.data_fim)}`}</div>
+                                  <div>{f.numero}</div>
+                                </td>
+                                <td className="p-3 text-right">-</td>
+                                <td className="p-3 text-right">{formatarMoeda(Number(f.valor))}</td>
+                                <td className="p-3 text-center opacity-60">{getStatusBadge(f.status)}</td>
+                              </tr>
+                            ))}
+                            <tr className={`hover:bg-gray-50 transition-colors ${locacoesSelecionadas.has(l.id) ? 'bg-blue-50' : ''}`}>
                               <td className="p-3 text-center">
                                 <input type="checkbox" checked={locacoesSelecionadas.has(l.id)}
                                   onChange={() => {
@@ -940,23 +956,27 @@ export default function FaturamentoPage() {
                               <td className="p-3 font-medium">{l.numero}</td>
                               <td className="p-3">{l.cliente_nome}</td>
                               <td className="p-3 text-gray-500 text-xs">
-                                {l.data_inicio ? formatarData(l.data_inicio) : '-'} a {l.data_fim ? formatarData(l.data_fim) : 'Indefinido'}
-                              </td>
-                              <td className="p-3 text-right text-gray-500">{formatarMoeda(Number(l.valor_total))}</td>
-                              <td className="p-3 text-right font-medium text-green-700">
-                                {formatarMoeda(Number(l.valor_medicao || l.valor_total))}
-                                {l.complemento && (
-                                  <div className="text-xs font-normal text-amber-700">
-                                    Complemento (ja faturado {formatarMoeda(Number(l.valor_ja_faturado))})
-                                  </div>
+                                {l.composicao?.pendente ? (
+                                  <span className="font-medium text-gray-700">
+                                    {l.composicao.pendente.rotulo} · {formatarData(l.composicao.pendente.data_inicio)} a {formatarData(l.composicao.pendente.data_fim)}
+                                  </span>
+                                ) : (
+                                  <>{l.data_inicio ? formatarData(l.data_inicio) : '-'} a {l.data_fim ? formatarData(l.data_fim) : 'Indefinido'}</>
                                 )}
                               </td>
+                              <td className="p-3 text-right text-gray-500">{formatarMoeda(Number(l.valor_total))}</td>
+                              <td className="p-3 text-right font-medium text-green-700">{formatarMoeda(Number(l.valor_medicao || l.valor_total))}</td>
                               <td className="p-3 text-center">
-                                <Badge variant={l.status === 'ativo' ? 'success' : 'default'}>
-                                  {l.status === 'ativo' ? 'Ativa' : l.status}
-                                </Badge>
+                                {l.composicao?.pendente ? (
+                                  <Badge variant="warning">A faturar</Badge>
+                                ) : (
+                                  <Badge variant={l.status === 'ativo' ? 'success' : 'default'}>
+                                    {l.status === 'ativo' ? 'Ativa' : l.status}
+                                  </Badge>
+                                )}
                               </td>
                             </tr>
+                            </Fragment>
                           ))}
                         </tbody>
                       </table>

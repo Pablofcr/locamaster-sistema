@@ -1,7 +1,7 @@
 import { supabase } from './supabase'
 import { hojeISO } from '@/lib/data'
 import { proximoSequencial } from '@/lib/numeracao'
-import { valorFaturadoDoContrato, saldoAFaturar, FaturaDoPeriodo } from '@/lib/saldoFaturamento'
+import { partesDoMes, faturasDoContrato, saldoAFaturar, comporMes, FaturaDoPeriodo, ComposicaoDoMes } from '@/lib/saldoFaturamento'
 
 // ============ HELPERS ============
 
@@ -124,33 +124,8 @@ function proximoDia(dateStr: string): string {
 // Medição = diária × dias_utilizados (dentro dos dias faturáveis)
 
 export function calcularValorMedicao(locacao: any, periodoReferencia: string): number {
-  const [ano, mes] = periodoReferencia.split('-').map(Number)
-  const diasReais = new Date(ano, mes, 0).getDate()
-  const diasFaturaveis = Math.min(diasReais, 30)
-
-  const mesStr = String(mes).padStart(2, '0')
-  const inicioMes = `${ano}-${mesStr}-01`
-  const fimMesFaturavel = `${ano}-${mesStr}-${String(diasFaturaveis).padStart(2, '0')}`
-
-  const periodos = obterPeriodosContrato(locacao)
-  if (periodos.length === 0) return 0
-
-  let valorTotal = 0
-  for (const periodo of periodos) {
-    // Pular periodos que nao sobrepoem o intervalo faturavel
-    if (periodo.data_fim < inicioMes || periodo.data_inicio > fimMesFaturavel) continue
-
-    // Calcular dias efetivos do periodo dentro do intervalo faturavel
-    const inicioNoMes = periodo.data_inicio > inicioMes ? periodo.data_inicio : inicioMes
-    const fimNoMes = periodo.data_fim < fimMesFaturavel ? periodo.data_fim : fimMesFaturavel
-    const diasUtilizados = diffDias(inicioNoMes, fimNoMes)
-
-    if (diasUtilizados > 0) {
-      // Diária fixa = valor_mensal / 30
-      valorTotal += (periodo.valor_total / 30) * diasUtilizados
-    }
-  }
-
+  const valorTotal = partesDoMes(obterPeriodosContrato(locacao), periodoReferencia)
+    .reduce((soma, parte) => soma + parte.valor, 0)
   return Math.round(valorTotal * 100) / 100
 }
 
@@ -159,9 +134,10 @@ export function calcularValorMedicao(locacao: any, periodoReferencia: string): n
 async function obterFaturasDoPeriodo(periodoReferencia: string): Promise<FaturaDoPeriodo[]> {
   const { data } = await supabase
     .from('faturas')
-    .select('locacao_id, locacao_numero, valor, valor_original, observacoes')
+    .select('numero, status, locacao_id, locacao_numero, valor, valor_original, observacoes, created_at')
     .eq('periodo_referencia', periodoReferencia)
     .neq('status', 'cancelado')
+    .order('created_at', { ascending: true })
   return data || []
 }
 
@@ -170,16 +146,36 @@ async function obterFaturasDoPeriodo(periodoReferencia: string): Promise<FaturaD
  *
  * Sem fatura no mes: a medicao inteira. Com fatura: so o saldo que ela nao
  * cobriu — o caso do contrato renovado depois de o mes ser faturado, em que os
- * dias do periodo novo ficaram de fora. valor 0 = nada a faturar.
+ * dias da renovacao ficaram de fora. Nesse caso vem tambem a composicao do mes
+ * (faturas ja emitidas e a parte pendente), para a tela e a observacao da
+ * fatura. valor 0 = nada a faturar.
  */
-function calcularValorAFaturar(locacao: any, periodoReferencia: string, faturasDoPeriodo: FaturaDoPeriodo[]) {
+function calcularValorAFaturar(
+  locacao: any,
+  periodoReferencia: string,
+  faturasDoPeriodo: FaturaDoPeriodo[]
+): { valor: number; composicao: ComposicaoDoMes | null } {
+  const partes = partesDoMes(obterPeriodosContrato(locacao), periodoReferencia)
   const medicao = calcularValorMedicao(locacao, periodoReferencia)
-  const jaFaturado = valorFaturadoDoContrato(faturasDoPeriodo, locacao)
+  const faturadas = faturasDoContrato(faturasDoPeriodo, locacao)
 
-  if (jaFaturado === 0) {
-    return { valor: medicao > 0 ? medicao : (Number(locacao.valor_total) || 0), jaFaturado, complemento: false }
+  // Parte do contrato numa fatura unificada ilegivel: na duvida o mes fica fechado
+  if (faturadas === null) return { valor: 0, composicao: { faturadas: [], pendente: null } }
+
+  if (faturadas.length === 0) {
+    return { valor: medicao > 0 ? medicao : (Number(locacao.valor_total) || 0), composicao: null }
   }
-  return { valor: saldoAFaturar(medicao, jaFaturado), jaFaturado, complemento: true }
+
+  const jaFaturado = faturadas.reduce((s, f) => s + f.valor, 0)
+  const saldo = saldoAFaturar(medicao, jaFaturado)
+  return { valor: saldo, composicao: comporMes(partes, faturadas, saldo) }
+}
+
+/** Observacao da parte pendente: "Renovação 1 — período 13/08/2026 a 30/08/2026" */
+function descreverPendente(composicao: ComposicaoDoMes | null): string {
+  const pendente = composicao?.pendente
+  if (!pendente) return ''
+  return `${pendente.rotulo} — período ${formatarData(pendente.data_inicio)} a ${formatarData(pendente.data_fim)}`
 }
 
 // ============ CALCULAR DATA VENCIMENTO POR CONDICAO ============
@@ -338,8 +334,8 @@ export async function gerarFaturasLote(periodoReferencia: string, locacaoIds?: n
   const erros: string[] = []
 
   for (const locacao of locacoesFiltradas) {
-    const { valor, jaFaturado, complemento } = calcularValorAFaturar(locacao, periodoReferencia, faturasDoPeriodo)
-    if (complemento && valor <= 0) continue
+    const { valor, composicao } = calcularValorAFaturar(locacao, periodoReferencia, faturasDoPeriodo)
+    if (composicao && valor <= 0) continue
 
     try {
       const diaFat = locacao.dia_faturamento || 1
@@ -352,7 +348,7 @@ export async function gerarFaturasLote(periodoReferencia: string, locacaoIds?: n
         data_vencimento: dataVencStr,
         tipo: 'recorrente',
         periodo_referencia: periodoReferencia,
-        observacoes: complemento ? `Complemento da medicao do mes (ja faturado ${formatarMoeda(jaFaturado)})` : '',
+        observacoes: descreverPendente(composicao),
         gerada_automaticamente: true,
       })
       geradas++
@@ -389,7 +385,7 @@ export async function gerarFaturaUnificada(periodoReferencia: string, locacaoIds
   const faturasDoPeriodo = await obterFaturasDoPeriodo(periodoReferencia)
   const aFaturar = locacoes
     .map(l => ({ locacao: l, ...calcularValorAFaturar(l, periodoReferencia, faturasDoPeriodo) }))
-    .filter(item => !item.complemento || item.valor > 0)
+    .filter(item => !item.composicao || item.valor > 0)
   const locacoesValidas = aFaturar.map(item => item.locacao)
 
   if (locacoesValidas.length === 0) {
@@ -405,11 +401,11 @@ export async function gerarFaturaUnificada(periodoReferencia: string, locacaoIds
   const diasVencimento = config?.dias_para_vencimento || 10
 
   // Calcular valores individuais e total
-  const detalhes: { numero: string; valor: number; jaFaturado: number; complemento: boolean }[] = []
+  const detalhes: { numero: string; valor: number; periodo: string }[] = []
   let valorTotal = 0
 
   for (const item of aFaturar) {
-    detalhes.push({ numero: item.locacao.numero, valor: item.valor, jaFaturado: item.jaFaturado, complemento: item.complemento })
+    detalhes.push({ numero: item.locacao.numero, valor: item.valor, periodo: descreverPendente(item.composicao) })
     valorTotal += item.valor
   }
   valorTotal = Math.round(valorTotal * 100) / 100
@@ -424,7 +420,7 @@ export async function gerarFaturaUnificada(periodoReferencia: string, locacaoIds
   const locacaoNumeros = locacoesValidas.map(l => l.numero).join(', ')
   // O formato "NUMERO: R$ valor" e lido de volta por valorFaturadoDoContrato — nao mudar
   const observacoes = detalhes
-    .map(d => `${d.numero}: ${formatarMoeda(d.valor)}${d.complemento ? ` (complemento da medicao do mes; ja faturado ${formatarMoeda(d.jaFaturado)})` : ''}`)
+    .map(d => `${d.numero}: ${formatarMoeda(d.valor)}${d.periodo ? ` (${d.periodo})` : ''}`)
     .join(' | ')
   const cliente = primeiraLocacao.clientes as any
 
@@ -842,8 +838,8 @@ export async function obterLocacoesElegiveis(periodoReferencia: string) {
 
   return vigentes
     .map(l => {
-      const { valor, jaFaturado, complemento } = calcularValorAFaturar(l, periodoReferencia, faturasDoPeriodo)
-      return { ...l, valor_medicao: valor, valor_ja_faturado: jaFaturado, complemento }
+      const { valor, composicao } = calcularValorAFaturar(l, periodoReferencia, faturasDoPeriodo)
+      return { ...l, valor_medicao: valor, composicao }
     })
-    .filter(l => !l.complemento || l.valor_medicao > 0)
+    .filter(l => !l.composicao || l.valor_medicao > 0)
 }
