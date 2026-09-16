@@ -11,7 +11,7 @@
 
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { ContaBancaria, lerContasBancarias, descreverConta } from './configuracaoPagamento'
+import { ContaBancaria, contaPrincipal, descreverConta } from './configuracaoPagamento'
 
 export interface FaturaConsolidada {
   numero: string
@@ -50,6 +50,8 @@ export interface ConfigPagamentoConsolidado {
   banco_titular?: string
   /** Contas bancarias da configuracao; se vazia, valem os campos banco_* acima */
   bancos?: ContaBancaria[]
+  /** Conta escolhida para este documento; sem ela, sai a principal */
+  conta?: ContaBancaria | null
   juros_mora?: number
   multa_atraso?: number
 }
@@ -287,13 +289,15 @@ export function construirPDFConsolidado(
     y += 5
   }
 
-  lerContasBancarias(config).forEach((conta, i) => {
+  // Uma conta so: a escolhida na hora do PDF ou, sem escolha, a principal
+  const conta = config?.conta || contaPrincipal(config)
+  if (conta) {
     doc.setFont('helvetica', 'bold')
-    if (i === 0) doc.text('Deposito:', margin + 2, y)
+    doc.text('Deposito:', margin + 2, y)
     doc.setFont('helvetica', 'normal')
     doc.text(descreverConta(conta), margin + 20, y)
     y += 5
-  })
+  }
 
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...CINZA)

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
 import { supabase } from '@/lib/supabase'
-import { ContaBancaria, lerContasBancarias, statusConfiguracao } from '@/lib/configuracaoPagamento'
+import { ContaBancaria, lerContasBancarias, contaPrincipal, statusConfiguracao } from '@/lib/configuracaoPagamento'
 
 export default function ConfiguracoesFaturamentoPage() {
   const { showToast } = useToast()
@@ -58,15 +58,26 @@ export default function ConfiguracoesFaturamentoPage() {
     setLoading(false)
   }
 
-  const adicionarBanco = () => setBancos([...bancos, { nome: '', agencia: '', conta: '', titular: '' }])
+  // A primeira conta cadastrada ja nasce principal: sempre tem de haver uma
+  const adicionarBanco = () =>
+    setBancos([...bancos, { nome: '', agencia: '', conta: '', titular: '', principal: bancos.length === 0 }])
 
-  const removerBanco = (indice: number) => setBancos(bancos.filter((_, i) => i !== indice))
+  const marcarPrincipal = (indice: number) =>
+    setBancos(bancos.map((b, i) => ({ ...b, principal: i === indice })))
+
+  const removerBanco = (indice: number) => {
+    const restantes = bancos.filter((_, i) => i !== indice)
+    // Removida a principal, a primeira que sobrou assume
+    if (restantes.length > 0 && !restantes.some(b => b.principal)) restantes[0] = { ...restantes[0], principal: true }
+    setBancos(restantes)
+  }
 
   const atualizarBanco = (indice: number, campo: keyof ContaBancaria, valor: string) =>
     setBancos(bancos.map((b, i) => (i === indice ? { ...b, [campo]: valor } : b)))
 
   // As contas em branco nao sao salvas; o PDF nao mostraria nada delas
   const bancosPreenchidos = lerContasBancarias({ bancos })
+  const principal = contaPrincipal({ bancos })
   const status = statusConfiguracao({ ...form, bancos })
 
   const salvar = async () => {
@@ -80,11 +91,11 @@ export default function ConfiguracoesFaturamentoPage() {
         pix_chave: form.pix_chave,
         pix_tipo: form.pix_tipo,
         bancos: bancosPreenchidos,
-        // Espelha a primeira conta nas colunas antigas: o que le so elas continua funcionando
-        banco_nome: bancosPreenchidos[0]?.nome || '',
-        banco_agencia: bancosPreenchidos[0]?.agencia || '',
-        banco_conta: bancosPreenchidos[0]?.conta || '',
-        banco_titular: bancosPreenchidos[0]?.titular || '',
+        // Espelha a conta principal nas colunas antigas: o que le so elas continua funcionando
+        banco_nome: principal?.nome || '',
+        banco_agencia: principal?.agencia || '',
+        banco_conta: principal?.conta || '',
+        banco_titular: principal?.titular || '',
         observacoes_padrao: form.observacoes_padrao,
         updated_at: new Date().toISOString(),
       }
@@ -200,7 +211,8 @@ export default function ConfiguracoesFaturamentoPage() {
           <CardHeader><CardTitle>Contas Bancarias</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <p className="text-xs text-gray-500">
-              Todas as contas saem nas instrucoes de pagamento do PDF, na ordem desta lista.
+              A fatura sai com a conta principal. Para usar outra, escolha no seletor &quot;Conta para o PDF&quot;
+              antes de gerar o documento.
             </p>
 
             {bancos.length === 0 && (
@@ -210,7 +222,13 @@ export default function ConfiguracoesFaturamentoPage() {
             {bancos.map((banco, i) => (
               <div key={i} className="p-3 border rounded-lg space-y-3 bg-gray-50">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-gray-600">Conta {i + 1}</span>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="conta-principal" checked={Boolean(banco.principal)}
+                      onChange={() => marcarPrincipal(i)} />
+                    <span className="text-xs font-semibold text-gray-600">
+                      Conta {i + 1}{banco.principal ? ' - principal' : ''}
+                    </span>
+                  </label>
                   <button onClick={() => removerBanco(i)} className="text-xs text-red-600 hover:underline">
                     Remover
                   </button>

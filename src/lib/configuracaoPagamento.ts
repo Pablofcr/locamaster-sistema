@@ -16,6 +16,8 @@ export interface ContaBancaria {
   agencia: string
   conta: string
   titular: string
+  /** A conta que sai nas faturas quando nenhuma outra e escolhida na hora do PDF */
+  principal?: boolean
 }
 
 export interface StatusConfiguracao {
@@ -55,6 +57,7 @@ export function lerContasBancarias(config: any): ContaBancaria[] {
       agencia: texto(b?.agencia),
       conta: texto(b?.conta),
       titular: texto(b?.titular),
+      principal: Boolean(b?.principal),
     }))
     .filter(contaPreenchida)
 
@@ -65,8 +68,20 @@ export function lerContasBancarias(config: any): ContaBancaria[] {
     agencia: texto(config.banco_agencia),
     conta: texto(config.banco_conta),
     titular: texto(config.banco_titular),
+    principal: true,
   }
   return contaPreenchida(antiga) ? [antiga] : []
+}
+
+/**
+ * A conta que vai na fatura por padrao: a marcada como principal ou, se
+ * nenhuma estiver marcada, a primeira da lista — nunca nenhuma quando ha
+ * conta cadastrada, senao a fatura sairia sem dados para deposito.
+ */
+export function contaPrincipal(config: any): ContaBancaria | null {
+  const contas = lerContasBancarias(config)
+  if (contas.length === 0) return null
+  return contas.find(c => c.principal) || contas[0]
 }
 
 /** Uma linha por conta: "Itau | Ag: 1234 | Cc: 56789-0 | BRALOC LTDA" */

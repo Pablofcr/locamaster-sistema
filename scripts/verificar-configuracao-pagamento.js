@@ -44,29 +44,44 @@ function eq(descricao, obtido, esperado) {
   }
 }
 
+// Entrada: como a conta e digitada na tela. Saida: sempre com a marca `principal`.
 const itau = { nome: 'Itau', agencia: '1234', conta: '56789-0', titular: 'BRALOC LTDA' }
 const bb = { nome: 'Banco do Brasil', agencia: '4321', conta: '09876-5', titular: 'BRALOC LTDA' }
+const lido = (conta, principal = false) => ({ ...conta, principal })
 const configAntiga = { banco_nome: 'Itau', banco_agencia: '1234', banco_conta: '56789-0', banco_titular: 'BRALOC LTDA' }
 
 console.log('\n--- lerContasBancarias ---')
 eq('sem configuracao', c.lerContasBancarias(null), [])
 eq('configuracao vazia', c.lerContasBancarias({}), [])
-eq('formato antigo (uma conta nas colunas)', c.lerContasBancarias(configAntiga), [itau])
-eq('lista nova com duas contas', c.lerContasBancarias({ bancos: [itau, bb] }), [itau, bb])
-eq('lista nova em texto JSON', c.lerContasBancarias({ bancos: JSON.stringify([bb]) }), [bb])
+eq('formato antigo (uma conta nas colunas) ja e a principal',
+  c.lerContasBancarias(configAntiga), [lido(itau, true)])
+eq('lista nova com duas contas', c.lerContasBancarias({ bancos: [itau, bb] }), [lido(itau), lido(bb)])
+eq('lista nova em texto JSON', c.lerContasBancarias({ bancos: JSON.stringify([bb]) }), [lido(bb)])
+eq('marca de principal e preservada',
+  c.lerContasBancarias({ bancos: [itau, { ...bb, principal: true }] }), [lido(itau), lido(bb, true)])
 eq('lista nova tem prioridade sobre as colunas antigas',
-  c.lerContasBancarias({ ...configAntiga, bancos: [bb] }), [bb])
+  c.lerContasBancarias({ ...configAntiga, bancos: [bb] }), [lido(bb)])
 eq('lista vazia cai para as colunas antigas',
-  c.lerContasBancarias({ ...configAntiga, bancos: [] }), [itau])
+  c.lerContasBancarias({ ...configAntiga, bancos: [] }), [lido(itau, true)])
 eq('entradas em branco sao descartadas',
-  c.lerContasBancarias({ bancos: [itau, { nome: '', agencia: '', conta: '', titular: '' }] }), [itau])
+  c.lerContasBancarias({ bancos: [itau, { nome: '', agencia: '', conta: '', titular: '' }] }), [lido(itau)])
 eq('conta so com o nome ainda vale',
-  c.lerContasBancarias({ bancos: [{ nome: 'Caixa' }] }), [{ nome: 'Caixa', agencia: '', conta: '', titular: '' }])
+  c.lerContasBancarias({ bancos: [{ nome: 'Caixa' }] }), [{ nome: 'Caixa', agencia: '', conta: '', titular: '', principal: false }])
 eq('espacos em volta sao limpos',
-  c.lerContasBancarias({ bancos: [{ nome: ' Itau ', agencia: ' 1234', conta: '56789-0 ', titular: 'BRALOC LTDA' }] }), [itau])
+  c.lerContasBancarias({ bancos: [{ nome: ' Itau ', agencia: ' 1234', conta: '56789-0 ', titular: 'BRALOC LTDA' }] }), [lido(itau)])
 eq('JSON invalido nao derruba, cai para as colunas antigas',
-  c.lerContasBancarias({ ...configAntiga, bancos: '{[' }), [itau])
+  c.lerContasBancarias({ ...configAntiga, bancos: '{[' }), [lido(itau, true)])
 eq('valor que nao e lista e ignorado', c.lerContasBancarias({ bancos: { nome: 'Itau' } }), [])
+
+console.log('\n--- contaPrincipal ---')
+eq('sem conta cadastrada', c.contaPrincipal({}), null)
+eq('a conta marcada como principal',
+  c.contaPrincipal({ bancos: [itau, { ...bb, principal: true }] }), lido(bb, true))
+eq('sem marcacao, vale a primeira da lista',
+  c.contaPrincipal({ bancos: [itau, bb] }), lido(itau))
+eq('formato antigo', c.contaPrincipal(configAntiga), lido(itau, true))
+eq('duas marcadas: vale a primeira marcada',
+  c.contaPrincipal({ bancos: [itau, { ...bb, principal: true }, { ...itau, nome: 'Caixa', principal: true }] }), lido(bb, true))
 
 console.log('\n--- descreverConta ---')
 eq('conta completa', c.descreverConta(itau), 'Itau | Ag: 1234 | Cc: 56789-0 | BRALOC LTDA')

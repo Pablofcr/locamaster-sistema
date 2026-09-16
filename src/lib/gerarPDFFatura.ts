@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { ContaBancaria, lerContasBancarias, descreverConta } from './configuracaoPagamento'
+import { ContaBancaria, contaPrincipal, descreverConta } from './configuracaoPagamento'
 
 export interface DadosFatura {
   numero: string
@@ -58,6 +58,8 @@ export interface ConfigPagamento {
   banco_titular?: string
   /** Contas bancarias da configuracao; se vazia, valem os campos banco_* acima */
   bancos?: ContaBancaria[]
+  /** Conta escolhida para esta fatura; sem ela, sai a principal */
+  conta?: ContaBancaria | null
   juros_mora?: number
   multa_atraso?: number
 }
@@ -338,14 +340,15 @@ export function gerarPDFFatura(dados: DadosFatura, empresa?: DadosEmpresaFatura,
     y += 5
   }
 
-  const contas = lerContasBancarias(config)
-  contas.forEach((conta, i) => {
+  // Uma conta so: a escolhida na hora do PDF ou, sem escolha, a principal
+  const conta = config?.conta || contaPrincipal(config)
+  if (conta) {
     doc.setFont('helvetica', 'bold')
-    if (i === 0) doc.text('Deposito:', margin + 2, y)
+    doc.text('Deposito:', margin + 2, y)
     doc.setFont('helvetica', 'normal')
     doc.text(descreverConta(conta), margin + 20, y)
     y += 5
-  })
+  }
 
   y += 3
 

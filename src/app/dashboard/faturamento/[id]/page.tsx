@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/components/ui/Toast'
 import { supabase } from '@/lib/supabase'
 import { formatarMoeda, formatarData, registrarPagamento, cancelarFatura, corrigirDataPagamento, obterPeriodoCobertoPelaFatura } from '@/lib/faturamento'
+import { lerContasBancarias, contaPrincipal } from '@/lib/configuracaoPagamento'
 import { obterLogCobranca, registrarAcaoManual, abrirWhatsApp, processarTemplate } from '@/lib/cobranca'
 import { gerarPDFFatura } from '@/lib/gerarPDFFatura'
 import { useEmpresa } from '@/contexts/EmpresaContext'
@@ -24,6 +25,8 @@ export default function FaturaDetalhePage() {
   const [fatura, setFatura] = useState<any>(null)
   const [locacao, setLocacao] = useState<any>(null)
   const [cliente, setCliente] = useState<any>(null)
+  const [configPagamento, setConfigPagamento] = useState<any>(null)
+  const [indiceContaPDF, setIndiceContaPDF] = useState(0)
   const [pagamentos, setPagamentos] = useState<any[]>([])
   const [logCobranca, setLogCobranca] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -95,6 +98,17 @@ export default function FaturaDetalhePage() {
             .then(r => setCliente(r.data))
         )
       }
+
+      // Contas bancarias: alimentam o seletor de conta do PDF
+      promises.push(
+        Promise.resolve(supabase.from('configuracoes_faturamento').select('*').limit(1))
+          .then(r => {
+            const config = r.data?.[0] || null
+            setConfigPagamento(config)
+            const principal = lerContasBancarias(config).findIndex(c => c.principal)
+            setIndiceContaPDF(principal >= 0 ? principal : 0)
+          })
+      )
 
       promises.push(
         Promise.resolve(supabase.from('pagamentos').select('*').eq('fatura_id', faturaId).order('created_at', { ascending: false }))
@@ -195,11 +209,15 @@ export default function FaturaDetalhePage() {
     } catch { showToast('Erro ao registrar ação', 'error') }
   }
 
+  // A conta escolhida no seletor; sem escolha, a principal
+  const contasDisponiveis = lerContasBancarias(configPagamento)
+
   const handleGerarPDF = async () => {
     if (!fatura) return
     try {
       const { data: configArr } = await supabase.from('configuracoes_faturamento').select('*').limit(1)
       const config = configArr?.[0]
+      const conta = lerContasBancarias(config)[indiceContaPDF] || contaPrincipal(config)
       const periodoMedicao = await obterPeriodoCobertoPelaFatura(fatura)
 
       const itens = locacao ? [{
@@ -243,7 +261,7 @@ export default function FaturaDetalhePage() {
         email: empresa.email,
         telefone: empresa.telefone,
         logo_base64: empresa.logo_base64,
-      } : undefined, config || undefined)
+      } : undefined, config ? { ...config, conta } : undefined)
     } catch { showToast('Erro ao gerar PDF', 'error') }
   }
 
@@ -279,6 +297,18 @@ export default function FaturaDetalhePage() {
           <p className="text-gray-600">{fatura.cliente_nome}</p>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
+          {/* A conta que sai no PDF; so aparece quando ha mais de uma cadastrada */}
+          {contasDisponiveis.length > 1 && (
+            <select value={indiceContaPDF} onChange={e => setIndiceContaPDF(Number(e.target.value))}
+              title="Conta que aparece no PDF"
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm">
+              {contasDisponiveis.map((c, i) => (
+                <option key={i} value={i}>
+                  {c.nome || `Conta ${i + 1}`}{c.conta ? ` - ${c.conta}` : ''}{c.principal ? ' (principal)' : ''}
+                </option>
+              ))}
+            </select>
+          )}
           <Button variant="outline" onClick={handleGerarPDF}>PDF</Button>
           {fatura.status !== 'pago' && fatura.status !== 'cancelado' && (
             <>

@@ -24,7 +24,7 @@ import {
   obterPeriodoCobertoPelaFatura,
 } from '@/lib/faturamento'
 import { faturasDoContrato } from '@/lib/saldoFaturamento'
-import { lerContasBancarias, statusConfiguracao } from '@/lib/configuracaoPagamento'
+import { lerContasBancarias, contaPrincipal, statusConfiguracao } from '@/lib/configuracaoPagamento'
 import {
   carregarRegras,
   executarReguaCobranca,
@@ -71,6 +71,7 @@ export default function FaturamentoPage() {
   const [gerandoLote, setGerandoLote] = useState(false)
   const [gerandoConsolidado, setGerandoConsolidado] = useState(false)
   const [configPagamento, setConfigPagamento] = useState<any>(null)
+  const [indiceContaPDF, setIndiceContaPDF] = useState(0)
   const [locacoesSelecionadas, setLocacoesSelecionadas] = useState<Set<number>>(new Set())
 
   // Parcelas state
@@ -127,11 +128,24 @@ export default function FaturamentoPage() {
     setLoading(false)
   }
 
+  /**
+   * A conta que vai no PDF: a principal, ou outra escolhida no seletor.
+   * A escolha vale para os PDFs gerados agora e volta para a principal ao
+   * recarregar a tela — ela nao fica gravada na fatura.
+   */
+  const contasDisponiveis = lerContasBancarias(configPagamento)
+  const contaEscolhida = (config: any) =>
+    contasDisponiveis[indiceContaPDF] || contaPrincipal(config)
+
   // Sem PIX nem banco, a fatura sai sem como o cliente pagar — a tela avisa
   const carregarConfigPagamento = async () => {
     try {
       const { data } = await supabase.from('configuracoes_faturamento').select('*').limit(1)
-      setConfigPagamento(data?.[0] || null)
+      const config = data?.[0] || null
+      setConfigPagamento(config)
+      const contas = lerContasBancarias(config)
+      const principal = contas.findIndex(c => c.principal)
+      setIndiceContaPDF(principal >= 0 ? principal : 0)
     } catch { /* o aviso so nao aparece */ }
   }
 
@@ -417,6 +431,7 @@ export default function FaturamentoPage() {
         banco_conta: config.banco_conta,
         banco_titular: config.banco_titular,
         bancos: lerContasBancarias(config),
+        conta: contaEscolhida(config),
         juros_mora: config.juros_mora,
         multa_atraso: config.multa_atraso,
       } : undefined)
@@ -488,6 +503,7 @@ export default function FaturamentoPage() {
         banco_conta: config.banco_conta,
         banco_titular: config.banco_titular,
         bancos: lerContasBancarias(config),
+        conta: contaEscolhida(config),
         juros_mora: config.juros_mora,
         multa_atraso: config.multa_atraso,
       } : undefined)
@@ -820,6 +836,21 @@ export default function FaturamentoPage() {
                 <Input type="date" value={filtroDataAte} onChange={e => setFiltroDataAte(e.target.value)} placeholder="Até" />
                 <Input placeholder="Cliente..." value={filtroCliente} onChange={e => setFiltroCliente(e.target.value)} />
               </div>
+
+              {/* A conta que sai no PDF; so aparece quando ha mais de uma cadastrada */}
+              {contasDisponiveis.length > 1 && (
+                <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t">
+                  <label className="text-sm text-gray-600">Conta para o PDF:</label>
+                  <select value={indiceContaPDF} onChange={e => setIndiceContaPDF(Number(e.target.value))}
+                    className="px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    {contasDisponiveis.map((c, i) => (
+                      <option key={i} value={i}>
+                        {c.nome || `Conta ${i + 1}`}{c.conta ? ` - ${c.conta}` : ''}{c.principal ? ' (principal)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </CardContent>
           </Card>
 
