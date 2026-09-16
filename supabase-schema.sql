@@ -378,6 +378,11 @@ CREATE TABLE IF NOT EXISTS configuracoes_faturamento (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Contas bancarias para receber: a empresa pode receber em mais de um banco.
+-- Lista de { nome, agencia, conta, titular }. As colunas banco_* acima ficam
+-- com a primeira conta, para configuracoes ja salvas continuarem valendo.
+ALTER TABLE configuracoes_faturamento ADD COLUMN IF NOT EXISTS bancos JSONB DEFAULT '[]'::jsonb;
+
 -- RLS e políticas para novas tabelas
 ALTER TABLE pagamentos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE regua_cobranca ENABLE ROW LEVEL SECURITY;

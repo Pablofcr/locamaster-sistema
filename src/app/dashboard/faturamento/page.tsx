@@ -24,6 +24,7 @@ import {
   obterPeriodoCobertoPelaFatura,
 } from '@/lib/faturamento'
 import { faturasDoContrato } from '@/lib/saldoFaturamento'
+import { lerContasBancarias, statusConfiguracao } from '@/lib/configuracaoPagamento'
 import {
   carregarRegras,
   executarReguaCobranca,
@@ -32,6 +33,7 @@ import {
   abrirWhatsApp,
 } from '@/lib/cobranca'
 import { gerarPDFFatura } from '@/lib/gerarPDFFatura'
+import { gerarPDFConsolidado } from '@/lib/gerarPDFConsolidado'
 import { useEmpresa } from '@/contexts/EmpresaContext'
 import { hojeISO } from '@/lib/data'
 
@@ -67,6 +69,8 @@ export default function FaturamentoPage() {
   const [locacoesElegiveis, setLocacoesElegiveis] = useState<any[]>([])
   const [locacoes, setLocacoes] = useState<any[]>([])
   const [gerandoLote, setGerandoLote] = useState(false)
+  const [gerandoConsolidado, setGerandoConsolidado] = useState(false)
+  const [configPagamento, setConfigPagamento] = useState<any>(null)
   const [locacoesSelecionadas, setLocacoesSelecionadas] = useState<Set<number>>(new Set())
 
   // Parcelas state
@@ -118,8 +122,17 @@ export default function FaturamentoPage() {
     try {
       await atualizarFaturasVencidas()
       await carregarEstatisticas()
+      await carregarConfigPagamento()
     } catch { /* ignore */ }
     setLoading(false)
+  }
+
+  // Sem PIX nem banco, a fatura sai sem como o cliente pagar — a tela avisa
+  const carregarConfigPagamento = async () => {
+    try {
+      const { data } = await supabase.from('configuracoes_faturamento').select('*').limit(1)
+      setConfigPagamento(data?.[0] || null)
+    } catch { /* o aviso so nao aparece */ }
   }
 
   const carregarEstatisticas = async () => {
@@ -403,12 +416,85 @@ export default function FaturamentoPage() {
         banco_agencia: config.banco_agencia,
         banco_conta: config.banco_conta,
         banco_titular: config.banco_titular,
+        bancos: lerContasBancarias(config),
         juros_mora: config.juros_mora,
         multa_atraso: config.multa_atraso,
       } : undefined)
 
       showToast('PDF gerado com sucesso!', 'success')
     } catch { showToast('Erro ao gerar PDF', 'error') }
+  }
+
+  /**
+   * Um PDF so com as faturas selecionadas, para o cliente receber um
+   * documento — e nao um arquivo por fatura quando o ciclo da locacao
+   * atravessa dois meses. As faturas em si nao mudam.
+   */
+  const handleGerarPDFConsolidado = async () => {
+    const selecionadas = faturas.filter(f => selectedFaturas.has(f.id))
+    if (selecionadas.length === 0) return
+
+    const clientes = new Set(selecionadas.map(f => f.cliente_id))
+    if (clientes.size > 1) {
+      showToast('Selecione faturas de um mesmo cliente para o PDF consolidado', 'warning')
+      return
+    }
+    if (selecionadas.some(f => f.status === 'cancelado')) {
+      showToast('Fatura cancelada nao entra no PDF consolidado', 'warning')
+      return
+    }
+
+    setGerandoConsolidado(true)
+    try {
+      const primeira = selecionadas[0]
+      const { data: cliente } = await supabase
+        .from('clientes')
+        .select('cpf_cnpj, documento, email, telefone')
+        .eq('id', primeira.cliente_id)
+        .single()
+
+      const { data: configArr } = await supabase.from('configuracoes_faturamento').select('*').limit(1)
+      const config = configArr?.[0]
+
+      const ordenadas = [...selecionadas].sort((a, b) => (a.data_vencimento || '').localeCompare(b.data_vencimento || ''))
+      const comPeriodo = await Promise.all(ordenadas.map(async f => ({
+        numero: f.numero || `#${f.id}`,
+        periodo: await obterPeriodoCobertoPelaFatura(f),
+        locacao_numero: f.locacao_numero || '',
+        data_vencimento: f.data_vencimento,
+        valor: Number(f.valor) || 0,
+        valor_pago: Number(f.valor_pago) || 0,
+        status: f.status,
+      })))
+
+      gerarPDFConsolidado({
+        cliente_nome: primeira.cliente_nome || '',
+        cliente_documento: cliente?.cpf_cnpj || cliente?.documento || '',
+        cliente_email: cliente?.email || primeira.cliente_email || '',
+        cliente_telefone: cliente?.telefone || primeira.cliente_telefone || '',
+        faturas: comPeriodo,
+      }, empresa ? {
+        razao_social: empresa.razao_social,
+        nome_fantasia: empresa.nome_fantasia,
+        cnpj: empresa.cnpj,
+        email: empresa.email,
+        telefone: empresa.telefone,
+        logo_base64: empresa.logo_base64,
+      } : undefined, config ? {
+        pix_chave: config.pix_chave,
+        pix_tipo: config.pix_tipo,
+        banco_nome: config.banco_nome,
+        banco_agencia: config.banco_agencia,
+        banco_conta: config.banco_conta,
+        banco_titular: config.banco_titular,
+        bancos: lerContasBancarias(config),
+        juros_mora: config.juros_mora,
+        multa_atraso: config.multa_atraso,
+      } : undefined)
+    } catch {
+      showToast('Erro ao gerar PDF consolidado', 'error')
+    }
+    setGerandoConsolidado(false)
   }
 
   // ============ GERAR ACTIONS ============
@@ -581,6 +667,21 @@ export default function FaturamentoPage() {
         </Button>
       </div>
 
+      {/* Lembrete: configuracao de pagamento incompleta */}
+      {statusConfiguracao(configPagamento).semFormaDePagamento && (
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+          <div className="text-sm text-amber-900">
+            <strong>Suas faturas estao saindo sem instrucoes de pagamento.</strong>
+            <p className="text-xs mt-0.5">
+              Cadastre a chave PIX ou as contas bancarias para que apareçam no PDF da fatura e do demonstrativo.
+            </p>
+          </div>
+          <Button size="sm" onClick={() => router.push('/dashboard/faturamento/configuracoes')}>
+            Configurar agora
+          </Button>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="border-b border-gray-200">
         <nav className="flex space-x-1 overflow-x-auto">
@@ -727,6 +828,9 @@ export default function FaturamentoPage() {
             <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
               <span className="text-sm font-medium text-blue-700">{selectedFaturas.size} selecionadas</span>
               <Button size="sm" onClick={abrirBaixaLote}>Marcar Pagas</Button>
+              <Button size="sm" variant="outline" onClick={handleGerarPDFConsolidado} disabled={gerandoConsolidado}>
+                {gerandoConsolidado ? 'Gerando...' : 'PDF Consolidado'}
+              </Button>
               <Button size="sm" variant="danger" onClick={acaoLoteCancelar}>Cancelar</Button>
               <Button size="sm" variant="outline" onClick={() => setSelectedFaturas(new Set())}>Limpar</Button>
             </div>

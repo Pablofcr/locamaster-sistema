@@ -154,6 +154,13 @@ eq('duas faturas em sequencia, mes fechado',
 eq('arredondamento de centavo nao cria um dia a mais',
   s.comporMes(partesAgo, [{ numero: 'FAT-A', status: 'pago', valor: 2879.99 }], 4080).faturadas[0].data_fim, '2026-08-12')
 
+console.log('\n--- mesesDoIntervalo ---')
+eq('renovacao que atravessa dois meses', s.mesesDoIntervalo('2026-08-13', '2026-09-12'), ['2026-08', '2026-09'])
+eq('dentro do mesmo mes', s.mesesDoIntervalo('2026-08-05', '2026-08-20'), ['2026-08'])
+eq('virada de ano', s.mesesDoIntervalo('2026-12-20', '2027-01-19'), ['2026-12', '2027-01'])
+eq('fim antes do inicio', s.mesesDoIntervalo('2026-09-10', '2026-08-10'), [])
+eq('sem data', s.mesesDoIntervalo('', '2026-08-10'), [])
+
 console.log('\n--- periodoCobertoPelaFatura ---')
 const faturasAgo = [
   { numero: 'FAT-2026-025', status: 'pago', valor: 2880 },

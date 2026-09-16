@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
 import { supabase } from '@/lib/supabase'
+import { ContaBancaria, lerContasBancarias, statusConfiguracao } from '@/lib/configuracaoPagamento'
 
 export default function ConfiguracoesFaturamentoPage() {
   const { showToast } = useToast()
@@ -15,6 +16,8 @@ export default function ConfiguracoesFaturamentoPage() {
   const [saving, setSaving] = useState(false)
   const [configId, setConfigId] = useState<number | null>(null)
 
+  const [bancos, setBancos] = useState<ContaBancaria[]>([])
+
   const [form, setForm] = useState({
     dia_faturamento_padrao: '1',
     dias_para_vencimento: '10',
@@ -22,10 +25,6 @@ export default function ConfiguracoesFaturamentoPage() {
     multa_atraso: '2.00',
     pix_chave: '',
     pix_tipo: 'cnpj',
-    banco_nome: '',
-    banco_agencia: '',
-    banco_conta: '',
-    banco_titular: '',
     observacoes_padrao: '',
   })
 
@@ -51,16 +50,24 @@ export default function ConfiguracoesFaturamentoPage() {
           multa_atraso: String(c.multa_atraso || 2),
           pix_chave: c.pix_chave || '',
           pix_tipo: c.pix_tipo || 'cnpj',
-          banco_nome: c.banco_nome || '',
-          banco_agencia: c.banco_agencia || '',
-          banco_conta: c.banco_conta || '',
-          banco_titular: c.banco_titular || '',
           observacoes_padrao: c.observacoes_padrao || '',
         })
+        setBancos(lerContasBancarias(c))
       }
     } catch { showToast('Erro ao carregar configurações', 'error') }
     setLoading(false)
   }
+
+  const adicionarBanco = () => setBancos([...bancos, { nome: '', agencia: '', conta: '', titular: '' }])
+
+  const removerBanco = (indice: number) => setBancos(bancos.filter((_, i) => i !== indice))
+
+  const atualizarBanco = (indice: number, campo: keyof ContaBancaria, valor: string) =>
+    setBancos(bancos.map((b, i) => (i === indice ? { ...b, [campo]: valor } : b)))
+
+  // As contas em branco nao sao salvas; o PDF nao mostraria nada delas
+  const bancosPreenchidos = lerContasBancarias({ bancos })
+  const status = statusConfiguracao({ ...form, bancos })
 
   const salvar = async () => {
     setSaving(true)
@@ -72,20 +79,28 @@ export default function ConfiguracoesFaturamentoPage() {
         multa_atraso: parseFloat(form.multa_atraso) || 0,
         pix_chave: form.pix_chave,
         pix_tipo: form.pix_tipo,
-        banco_nome: form.banco_nome,
-        banco_agencia: form.banco_agencia,
-        banco_conta: form.banco_conta,
-        banco_titular: form.banco_titular,
+        bancos: bancosPreenchidos,
+        // Espelha a primeira conta nas colunas antigas: o que le so elas continua funcionando
+        banco_nome: bancosPreenchidos[0]?.nome || '',
+        banco_agencia: bancosPreenchidos[0]?.agencia || '',
+        banco_conta: bancosPreenchidos[0]?.conta || '',
+        banco_titular: bancosPreenchidos[0]?.titular || '',
         observacoes_padrao: form.observacoes_padrao,
         updated_at: new Date().toISOString(),
       }
 
-      if (configId) {
-        await supabase.from('configuracoes_faturamento').update(dados).eq('id', configId)
-      } else {
-        const { data } = await supabase.from('configuracoes_faturamento').insert(dados).select().single()
-        if (data) setConfigId(data.id)
+      const { error } = configId
+        ? await supabase.from('configuracoes_faturamento').update(dados).eq('id', configId)
+        : await supabase.from('configuracoes_faturamento').insert(dados).select().single()
+          .then(r => { if (r.data) setConfigId(r.data.id); return r })
+
+      // A lista de contas mora na coluna `bancos`, criada pela migracao do schema
+      if (error?.message?.includes('bancos')) {
+        showToast('Rode no Supabase: ALTER TABLE configuracoes_faturamento ADD COLUMN IF NOT EXISTS bancos JSONB DEFAULT \'[]\'::jsonb', 'error')
+        setSaving(false)
+        return
       }
+      if (error) throw error
 
       showToast('Configurações salvas!', 'success')
     } catch { showToast('Erro ao salvar', 'error') }
@@ -182,33 +197,81 @@ export default function ConfiguracoesFaturamentoPage() {
 
         {/* Dados bancarios */}
         <Card>
-          <CardHeader><CardTitle>Dados Bancarios</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Contas Bancarias</CardTitle></CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Banco</label>
-              <Input value={form.banco_nome} onChange={e => setForm({ ...form, banco_nome: e.target.value })}
-                placeholder="Ex: Banco do Brasil, Itau..." />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Agencia</label>
-                <Input value={form.banco_agencia} onChange={e => setForm({ ...form, banco_agencia: e.target.value })}
-                  placeholder="0000" />
+            <p className="text-xs text-gray-500">
+              Todas as contas saem nas instrucoes de pagamento do PDF, na ordem desta lista.
+            </p>
+
+            {bancos.length === 0 && (
+              <p className="text-sm text-gray-500">Nenhuma conta cadastrada.</p>
+            )}
+
+            {bancos.map((banco, i) => (
+              <div key={i} className="p-3 border rounded-lg space-y-3 bg-gray-50">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-gray-600">Conta {i + 1}</span>
+                  <button onClick={() => removerBanco(i)} className="text-xs text-red-600 hover:underline">
+                    Remover
+                  </button>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Banco</label>
+                  <Input value={banco.nome} onChange={e => atualizarBanco(i, 'nome', e.target.value)}
+                    placeholder="Ex: Banco do Brasil, Itau..." />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Agencia</label>
+                    <Input value={banco.agencia} onChange={e => atualizarBanco(i, 'agencia', e.target.value)}
+                      placeholder="0000" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Conta</label>
+                    <Input value={banco.conta} onChange={e => atualizarBanco(i, 'conta', e.target.value)}
+                      placeholder="00000-0" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Titular</label>
+                  <Input value={banco.titular} onChange={e => atualizarBanco(i, 'titular', e.target.value)}
+                    placeholder="Nome do titular da conta" />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Conta</label>
-                <Input value={form.banco_conta} onChange={e => setForm({ ...form, banco_conta: e.target.value })}
-                  placeholder="00000-0" />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Titular</label>
-              <Input value={form.banco_titular} onChange={e => setForm({ ...form, banco_titular: e.target.value })}
-                placeholder="Nome do titular da conta" />
-            </div>
+            ))}
+
+            <Button variant="outline" onClick={adicionarBanco} className="w-full">
+              + Adicionar banco
+            </Button>
           </CardContent>
         </Card>
       </div>
+
+      {/* Status da configuracao */}
+      <Card>
+        <CardHeader><CardTitle>Status da Configuracao</CardTitle></CardHeader>
+        <CardContent>
+          {status.semFormaDePagamento && (
+            <p className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+              Sem chave PIX e sem conta bancaria, o PDF da fatura sai sem dizer como o cliente deve pagar.
+            </p>
+          )}
+          <ul className="space-y-2 text-sm">
+            {[
+              { ok: status.temPix, label: 'Chave PIX', falta: 'Sem chave PIX cadastrada' },
+              { ok: status.temBanco, label: `Contas bancarias (${bancosPreenchidos.length})`, falta: 'Nenhuma conta bancaria cadastrada' },
+              { ok: status.temObservacoes, label: 'Observacoes padrao', falta: 'Sem texto padrao nas faturas (opcional)' },
+            ].map((item, i) => (
+              <li key={i} className="flex items-center gap-2">
+                <span className={item.ok ? 'text-green-600' : 'text-gray-400'}>{item.ok ? '✓' : '○'}</span>
+                <span className={item.ok ? 'text-gray-700' : 'text-gray-500'}>
+                  {item.ok ? item.label : item.falta}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </CardContent>
+      </Card>
 
       {/* Observacoes */}
       <Card>

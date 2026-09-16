@@ -12,7 +12,25 @@ import { gerarContratoLocacao } from '@/lib/gerarContratoLocacao'
 import { useEmpresa } from '@/contexts/EmpresaContext'
 import { gerarFatura } from '@/lib/faturamento'
 import { formatarNumeroRenovacao, numeroCorrespondeBusca } from '@/lib/numeracao'
-import { hojeISO } from '@/lib/data'
+import { mesesDoIntervalo } from '@/lib/saldoFaturamento'
+import { hojeISO, doISO, paraISO } from '@/lib/data'
+
+/** Dia seguinte a uma data YYYY-MM-DD. */
+function proximoDiaISO(dataISO: string): string {
+  if (!dataISO) return ''
+  const d = doISO(dataISO)
+  d.setDate(d.getDate() + 1)
+  return paraISO(d)
+}
+
+const NOMES_MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+
+/** "2026-08" vira "ago/2026" */
+function formatarMesReferencia(periodo: string): string {
+  if (!periodo) return ''
+  const [ano, mes] = periodo.split('-').map(Number)
+  return `${NOMES_MES[mes - 1] || mes}/${ano}`
+}
 
 export default function LocacoesPage() {
   const { showToast } = useToast()
@@ -45,6 +63,7 @@ export default function LocacoesPage() {
   const [renovarNovaDataFim, setRenovarNovaDataFim] = useState('')
   const [renovarItens, setRenovarItens] = useState<any[]>([])
   const [renovarItensManter, setRenovarItensManter] = useState<Record<number, boolean>>({})
+  const [faturasDosMesesRenovados, setFaturasDosMesesRenovados] = useState<any[]>([])
 
   // Devolucao
   const [showDevolucao, setShowDevolucao] = useState(false)
@@ -614,6 +633,38 @@ export default function LocacoesPage() {
 
     setShowRenovacao(true)
   }
+
+  /**
+   * Faturas que ja existem nos meses que a renovacao vai alcancar.
+   *
+   * Faturado o mes e renovado o contrato depois, a fatura daquele mes cobriu
+   * so os dias do periodo antigo. O aviso deixa isso a vista antes de renovar:
+   * a diferenca vai aparecer em Gerar Faturas como a parte da renovacao.
+   */
+  useEffect(() => {
+    if (!showRenovacao || !locacaoRenovar || !renovarNovaDataFim) { setFaturasDosMesesRenovados([]); return }
+
+    const inicioNovoPeriodo = proximoDiaISO(locacaoRenovar.data_fim)
+    const meses = mesesDoIntervalo(inicioNovoPeriodo, renovarNovaDataFim)
+    if (meses.length === 0) { setFaturasDosMesesRenovados([]); return }
+
+    let cancelado = false
+    supabase
+      .from('faturas')
+      .select('numero, valor, status, periodo_referencia, locacao_id, locacao_numero')
+      .in('periodo_referencia', meses)
+      .neq('status', 'cancelado')
+      .then(({ data }) => {
+        if (cancelado) return
+        const doContrato = (data || []).filter(f =>
+          f.locacao_id === locacaoRenovar.id ||
+          (f.locacao_numero || '').split(',').map((n: string) => n.trim()).includes(locacaoRenovar.numero)
+        )
+        setFaturasDosMesesRenovados(doContrato)
+      })
+
+    return () => { cancelado = true }
+  }, [showRenovacao, locacaoRenovar, renovarNovaDataFim])
 
   const confirmarRenovacao = async () => {
     if (!locacaoRenovar || !renovarNovaDataFim) return
@@ -1699,6 +1750,24 @@ export default function LocacoesPage() {
                     O periodo sera estendido ate a nova data fim. Data inicio mantem-se igual.
                   </p>
                 </div>
+
+                {faturasDosMesesRenovados.length > 0 && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900">
+                    <strong>Estes meses ja tem fatura emitida:</strong>
+                    <ul className="mt-1 space-y-0.5">
+                      {faturasDosMesesRenovados.map((f, i) => (
+                        <li key={i}>
+                          {formatarMesReferencia(f.periodo_referencia)} — {f.numero} ({formatarMoeda(Number(f.valor) || 0)})
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="mt-2 text-xs">
+                      A fatura cobriu so os dias do periodo atual. Depois de renovar, os dias a mais desses meses
+                      aparecem em Faturamento &gt; Gerar Faturas como a parte da renovacao, para faturar a diferenca.
+                      Se preferir uma fatura unica do mes, cancele a fatura acima e gere o mes de novo.
+                    </p>
+                  </div>
+                )}
 
                 <div>
                   <label className="flex items-center gap-2">

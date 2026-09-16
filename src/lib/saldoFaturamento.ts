@@ -76,6 +76,20 @@ function somarDias(dataISO: string, dias: number): string {
   return new Date(paraUTC(dataISO) + dias * 86400000).toISOString().slice(0, 10)
 }
 
+/** Meses de referencia (YYYY-MM) que o intervalo toca, do primeiro ao ultimo. */
+export function mesesDoIntervalo(dataInicio: string, dataFim: string): string[] {
+  if (!dataInicio || !dataFim || dataFim < dataInicio) return []
+  const meses: string[] = []
+  let [ano, mes] = dataInicio.split('-').map(Number)
+  const [anoFim, mesFim] = dataFim.split('-').map(Number)
+  while (ano < anoFim || (ano === anoFim && mes <= mesFim)) {
+    meses.push(`${ano}-${String(mes).padStart(2, '0')}`)
+    mes++
+    if (mes > 12) { mes = 1; ano++ }
+  }
+  return meses
+}
+
 function rotuloDoPeriodo(indice: number): string {
   return indice === 0 ? 'Contrato original' : `Renovação ${indice}`
 }

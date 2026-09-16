@@ -1,46 +1,38 @@
+/**
+ * Demonstrativo de cobranca: varias faturas do mesmo cliente num PDF so.
+ *
+ * O faturamento e por mes fechado, entao um ciclo de locacao que atravessa
+ * dois meses vira duas faturas — e o cliente teria de receber dois arquivos.
+ * Este documento junta as faturas escolhidas, com o periodo de cada uma e o
+ * total, sem mexer nas faturas: cada uma mantem seu vencimento e sua baixa.
+ *
+ * Nao substitui a fatura: e o resumo do que esta em aberto.
+ */
+
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { ContaBancaria, lerContasBancarias, descreverConta } from './configuracaoPagamento'
 
-export interface DadosFatura {
+export interface FaturaConsolidada {
   numero: string
-  data_emissao: string
+  periodo: string
+  locacao_numero?: string
   data_vencimento: string
-  tipo: string
-  parcela_numero?: number
-  parcela_total?: number
-  periodo_referencia?: string
-  forma_pagamento?: string
-  observacoes?: string
-  // Cliente
+  valor: number
+  valor_pago: number
+  status: string
+}
+
+export interface DadosConsolidado {
   cliente_nome: string
   cliente_documento?: string
   cliente_email?: string
   cliente_telefone?: string
-  // Locação
-  locacao_numero?: string
-  locacao_data_inicio?: string
-  locacao_data_fim?: string
-  periodo_medicao?: string
-  // Itens
-  itens: {
-    equipamento_nome: string
-    equipamento_marca?: string
-    equipamento_modelo?: string
-    quantidade: number
-    valor_unitario: number
-    subtotal: number
-  }[]
-  // Valores
-  valor_original: number
-  valor_desconto: number
-  valor_juros: number
-  valor_multa: number
-  valor_total: number
-  valor_pago: number
+  faturas: FaturaConsolidada[]
+  observacoes?: string
 }
 
-export interface DadosEmpresaFatura {
+export interface DadosEmpresaConsolidado {
   razao_social: string
   nome_fantasia?: string | null
   cnpj?: string | null
@@ -49,7 +41,7 @@ export interface DadosEmpresaFatura {
   logo_base64?: string | null
 }
 
-export interface ConfigPagamento {
+export interface ConfigPagamentoConsolidado {
   pix_chave?: string
   pix_tipo?: string
   banco_nome?: string
@@ -62,7 +54,7 @@ export interface ConfigPagamento {
   multa_atraso?: number
 }
 
-// Cores do template (mesmas do orçamento)
+// Cores do template (mesmas da fatura e do orcamento)
 const AZUL = [37, 99, 235] as const
 const CINZA_ESCURO = [55, 65, 81] as const
 const CINZA = [107, 114, 128] as const
@@ -78,7 +70,20 @@ function formatarData(dateStr: string): string {
   return d.toLocaleDateString('pt-BR')
 }
 
-export function gerarPDFFatura(dados: DadosFatura, empresa?: DadosEmpresaFatura, config?: ConfigPagamento) {
+const STATUS_LABEL: Record<string, string> = {
+  emitido: 'Em aberto',
+  pendente: 'Em aberto',
+  parcial: 'Parcial',
+  vencido: 'Vencida',
+  pago: 'Paga',
+}
+
+/** Monta o documento. Separado da abertura para poder ser gerado fora do navegador. */
+export function construirPDFConsolidado(
+  dados: DadosConsolidado,
+  empresa?: DadosEmpresaConsolidado,
+  config?: ConfigPagamentoConsolidado
+): jsPDF {
   const doc = new jsPDF('p', 'mm', 'a4')
   const pageWidth = 210
   const margin = 15
@@ -87,9 +92,6 @@ export function gerarPDFFatura(dados: DadosFatura, empresa?: DadosEmpresaFatura,
 
   const nomeFantasia = empresa?.nome_fantasia || empresa?.razao_social || 'Empresa'
   const razaoSocial = empresa?.razao_social || 'Empresa'
-  const cnpj = empresa?.cnpj || ''
-  const emailEmpresa = empresa?.email || ''
-  const telefoneEmpresa = empresa?.telefone || ''
 
   // ============ HEADER ============
   if (empresa?.logo_base64) {
@@ -109,25 +111,18 @@ export function gerarPDFFatura(dados: DadosFatura, empresa?: DadosEmpresaFatura,
   doc.setTextColor(...CINZA)
   doc.text(razaoSocial.toUpperCase(), textX, y + 14)
 
-  // Titulo FATURA (direita)
-  doc.setFontSize(18)
+  doc.setFontSize(15)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...AZUL)
-  doc.text('FATURA', pageWidth - margin, y + 8, { align: 'right' })
+  doc.text('DEMONSTRATIVO DE COBRANCA', pageWidth - margin, y + 8, { align: 'right' })
 
-  doc.setFontSize(10)
+  doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
   doc.setTextColor(...CINZA)
-  doc.text(`N. ${dados.numero}`, pageWidth - margin, y + 15, { align: 'right' })
-
-  if (dados.parcela_numero && dados.parcela_total) {
-    doc.setFontSize(9)
-    doc.text(`Parcela ${dados.parcela_numero}/${dados.parcela_total}`, pageWidth - margin, y + 21, { align: 'right' })
-  }
+  doc.text(`${dados.faturas.length} fatura(s)`, pageWidth - margin, y + 15, { align: 'right' })
 
   y += 30
 
-  // Linha separadora
   doc.setDrawColor(...AZUL)
   doc.setLineWidth(0.8)
   doc.line(margin, y, pageWidth - margin, y)
@@ -138,7 +133,6 @@ export function gerarPDFFatura(dados: DadosFatura, empresa?: DadosEmpresaFatura,
   const boxStartY = y
   const labelOffset = 22
 
-  // Box LOCADORA (esquerda)
   doc.setFillColor(...AZUL)
   doc.roundedRect(margin, y, boxWidth, 8, 1, 1, 'F')
   doc.setFontSize(9)
@@ -152,17 +146,16 @@ export function gerarPDFFatura(dados: DadosFatura, empresa?: DadosEmpresaFatura,
   doc.setFont('helvetica', 'bold'); doc.text('Razao Social:', margin + 3, locY)
   doc.setFont('helvetica', 'normal'); doc.text(razaoSocial, margin + 3 + labelOffset, locY)
   doc.setFont('helvetica', 'bold'); doc.text('CNPJ:', margin + 3, locY + 5)
-  doc.setFont('helvetica', 'normal'); doc.text(cnpj, margin + 3 + labelOffset, locY + 5)
+  doc.setFont('helvetica', 'normal'); doc.text(empresa?.cnpj || '', margin + 3 + labelOffset, locY + 5)
   doc.setFont('helvetica', 'bold'); doc.text('E-mail:', margin + 3, locY + 10)
-  doc.setFont('helvetica', 'normal'); doc.text(emailEmpresa, margin + 3 + labelOffset, locY + 10)
+  doc.setFont('helvetica', 'normal'); doc.text(empresa?.email || '', margin + 3 + labelOffset, locY + 10)
   doc.setFont('helvetica', 'bold'); doc.text('Telefone:', margin + 3, locY + 15)
-  doc.setFont('helvetica', 'normal'); doc.text(telefoneEmpresa, margin + 3 + labelOffset, locY + 15)
+  doc.setFont('helvetica', 'normal'); doc.text(empresa?.telefone || '', margin + 3 + labelOffset, locY + 15)
 
   doc.setDrawColor(200, 200, 200)
   doc.setLineWidth(0.3)
   doc.roundedRect(margin, y, boxWidth, 30, 1, 1, 'S')
 
-  // Box LOCATARIA (direita)
   const rightX = margin + boxWidth + 6
   doc.setFillColor(...AZUL)
   doc.roundedRect(rightX, y, boxWidth, 8, 1, 1, 'F')
@@ -189,131 +182,87 @@ export function gerarPDFFatura(dados: DadosFatura, empresa?: DadosEmpresaFatura,
 
   y = boxStartY + 35
 
-  // ============ DATAS / REFERENCIA ============
-  doc.setDrawColor(200, 200, 200)
-  doc.setLineWidth(0.3)
-  doc.line(margin, y, pageWidth - margin, y)
-  y += 5
-
-  const colW = contentWidth / 4
-  doc.setFontSize(7)
-  doc.setFont('helvetica', 'bold')
-  doc.setTextColor(...CINZA)
-
-  doc.text('Emissao:', margin, y)
-  doc.text('Vencimento:', margin + colW, y)
-  doc.text('Periodo:', margin + colW * 2, y)
-  doc.text('Referencia:', margin + colW * 3, y)
-
-  y += 5
-  doc.setFontSize(9)
-  doc.setTextColor(...CINZA_ESCURO)
-  doc.setFont('helvetica', 'normal')
-
-  doc.text(formatarData(dados.data_emissao), margin, y)
-  doc.text(formatarData(dados.data_vencimento), margin + colW, y)
-  doc.text(dados.periodo_medicao || dados.locacao_numero || '-', margin + colW * 2, y)
-  doc.text(dados.periodo_referencia || '-', margin + colW * 3, y)
-
-  y += 8
-
-  // ============ TABELA DE EQUIPAMENTOS ============
-  if (dados.itens && dados.itens.length > 0) {
-    doc.setFontSize(11)
-    doc.setFont('helvetica', 'bold')
-    doc.setTextColor(...CINZA_ESCURO)
-    doc.text('Itens', margin, y)
-    y += 3
-
-    const tableData = dados.itens.map(item => {
-      const desc = item.equipamento_marca || item.equipamento_modelo
-        ? `${item.equipamento_nome}\n${item.equipamento_marca || ''}${item.equipamento_modelo ? ' - ' + item.equipamento_modelo : ''}`
-        : item.equipamento_nome
-      return [
-        desc,
-        String(item.quantidade),
-        formatarMoeda(item.valor_unitario),
-        formatarMoeda(item.subtotal),
-      ]
-    })
-
-    autoTable(doc, {
-      startY: y,
-      head: [['Equipamento', 'Qtd', 'Valor Unit.', 'Subtotal']],
-      body: tableData,
-      theme: 'grid',
-      margin: { left: margin, right: margin },
-      headStyles: {
-        fillColor: AZUL as any,
-        textColor: BRANCO as any,
-        fontSize: 8,
-        fontStyle: 'bold',
-        halign: 'center',
-      },
-      columnStyles: {
-        0: { halign: 'left', cellWidth: 80 },
-        1: { halign: 'center', cellWidth: 20 },
-        2: { halign: 'right', cellWidth: 35 },
-        3: { halign: 'right', cellWidth: 35 },
-      },
-      bodyStyles: {
-        fontSize: 8,
-        textColor: CINZA_ESCURO as any,
-      },
-      alternateRowStyles: {
-        fillColor: [245, 247, 250],
-      },
-    })
-
-    y = (doc as any).lastAutoTable.finalY + 6
-  }
-
-  // ============ RESUMO FINANCEIRO ============
-  doc.setDrawColor(200, 200, 200)
-  doc.setLineWidth(0.3)
-  doc.line(margin, y, pageWidth - margin, y)
-  y += 5
-
+  // ============ TABELA DE FATURAS ============
   doc.setFontSize(11)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(...CINZA_ESCURO)
-  doc.text('Resumo Financeiro', margin, y)
-  y += 6
+  doc.text('Faturas', margin, y)
+  y += 3
+
+  const linhas = dados.faturas.map(f => {
+    const saldo = Number(f.valor) - Number(f.valor_pago || 0)
+    return [
+      f.locacao_numero ? `${f.numero}\n${f.locacao_numero}` : f.numero,
+      f.periodo || '-',
+      formatarData(f.data_vencimento),
+      STATUS_LABEL[f.status] || f.status,
+      formatarMoeda(Number(f.valor)),
+      formatarMoeda(saldo),
+    ]
+  })
+
+  autoTable(doc, {
+    startY: y,
+    head: [['Fatura', 'Periodo', 'Vencimento', 'Situacao', 'Valor', 'Saldo']],
+    body: linhas,
+    theme: 'grid',
+    margin: { left: margin, right: margin },
+    headStyles: {
+      fillColor: AZUL as any,
+      textColor: BRANCO as any,
+      fontSize: 8,
+      fontStyle: 'bold',
+      halign: 'center',
+    },
+    columnStyles: {
+      // Sem largura fixa: a coluna do periodo ("13/07/2026 a 30/07/2026") nao cabe em medida fixa
+      0: { halign: 'left' },
+      1: { halign: 'center' },
+      2: { halign: 'center' },
+      3: { halign: 'center' },
+      4: { halign: 'right' },
+      5: { halign: 'right' },
+    },
+    bodyStyles: {
+      fontSize: 8,
+      textColor: CINZA_ESCURO as any,
+    },
+    alternateRowStyles: {
+      fillColor: [245, 247, 250],
+    },
+  })
+
+  y = (doc as any).lastAutoTable.finalY + 6
+
+  // ============ TOTAIS ============
+  const total = dados.faturas.reduce((s, f) => s + Number(f.valor), 0)
+  const pago = dados.faturas.reduce((s, f) => s + Number(f.valor_pago || 0), 0)
+  const saldoTotal = total - pago
 
   const resumoX = pageWidth - margin - 80
-
-  const linhaResumo = (label: string, valor: string, bold = false) => {
+  const linhaResumo = (label: string, valor: string) => {
     doc.setFontSize(9)
-    doc.setFont('helvetica', bold ? 'bold' : 'normal')
+    doc.setFont('helvetica', 'normal')
     doc.setTextColor(...CINZA_ESCURO)
     doc.text(label, resumoX, y)
     doc.text(valor, pageWidth - margin, y, { align: 'right' })
     y += 5
   }
 
-  linhaResumo('Valor Original:', formatarMoeda(dados.valor_original))
-  if (dados.valor_desconto > 0) linhaResumo('Desconto:', `- ${formatarMoeda(dados.valor_desconto)}`)
-  if (dados.valor_juros > 0) linhaResumo('Juros:', `+ ${formatarMoeda(dados.valor_juros)}`)
-  if (dados.valor_multa > 0) linhaResumo('Multa:', `+ ${formatarMoeda(dados.valor_multa)}`)
+  linhaResumo('Soma das faturas:', formatarMoeda(total))
+  if (pago > 0) linhaResumo('Ja pago:', `- ${formatarMoeda(pago)}`)
   y += 2
 
-  // Total em destaque
   doc.setDrawColor(...AZUL)
   doc.setLineWidth(0.5)
   doc.roundedRect(resumoX - 5, y - 3, pageWidth - margin - resumoX + 10, 12, 2, 2, 'S')
   doc.setFontSize(12)
   doc.setFont('helvetica', 'bold')
-  doc.text('TOTAL:', resumoX, y + 5)
+  doc.setTextColor(...CINZA_ESCURO)
+  doc.text('TOTAL A PAGAR:', resumoX, y + 5)
   doc.setTextColor(...AZUL)
-  doc.text(formatarMoeda(dados.valor_total), pageWidth - margin, y + 5, { align: 'right' })
-  y += 16
-
-  if (dados.valor_pago > 0) {
-    doc.setTextColor(...CINZA_ESCURO)
-    linhaResumo('Valor Pago:', formatarMoeda(dados.valor_pago))
-    linhaResumo('Saldo Devedor:', formatarMoeda(dados.valor_total - dados.valor_pago), true)
-    y += 2
-  }
+  doc.text(formatarMoeda(saldoTotal), pageWidth - margin, y + 5, { align: 'right' })
+  y += 18
 
   // ============ INSTRUCOES DE PAGAMENTO ============
   doc.setDrawColor(200, 200, 200)
@@ -333,13 +282,12 @@ export function gerarPDFFatura(dados: DadosFatura, empresa?: DadosEmpresaFatura,
     doc.setFont('helvetica', 'bold')
     doc.text('PIX:', margin + 2, y)
     doc.setFont('helvetica', 'normal')
-    const tipoLabel: Record<string, string> = { cnpj: 'CNPJ', cpf: 'CPF', email: 'E-mail', telefone: 'Telefone', aleatoria: 'Chave Aleatória' }
+    const tipoLabel: Record<string, string> = { cnpj: 'CNPJ', cpf: 'CPF', email: 'E-mail', telefone: 'Telefone', aleatoria: 'Chave Aleatoria' }
     doc.text(`Chave ${tipoLabel[config.pix_tipo || 'cnpj'] || 'CNPJ'}: ${config.pix_chave}`, margin + 14, y)
     y += 5
   }
 
-  const contas = lerContasBancarias(config)
-  contas.forEach((conta, i) => {
+  lerContasBancarias(config).forEach((conta, i) => {
     doc.setFont('helvetica', 'bold')
     if (i === 0) doc.text('Deposito:', margin + 2, y)
     doc.setFont('helvetica', 'normal')
@@ -347,7 +295,11 @@ export function gerarPDFFatura(dados: DadosFatura, empresa?: DadosEmpresaFatura,
     y += 5
   })
 
-  y += 3
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(...CINZA)
+  doc.setFontSize(7)
+  doc.text('Cada fatura mantem o seu vencimento. Este demonstrativo reune as faturas acima para facilitar o pagamento.', margin + 2, y)
+  y += 8
 
   // ============ PENALIDADES ============
   doc.setFillColor(255, 248, 240)
@@ -361,10 +313,7 @@ export function gerarPDFFatura(dados: DadosFatura, empresa?: DadosEmpresaFatura,
   doc.setTextColor(180, 83, 9)
   doc.text('PENALIDADES POR ATRASO', margin + 4, y + 5)
   doc.setFont('helvetica', 'normal')
-  doc.setFontSize(7)
-  const jurosTx = config?.juros_mora || 2
-  const multaTx = config?.multa_atraso || 2
-  doc.text(`Multa de ${multaTx}% sobre o valor da fatura + Juros de mora de ${jurosTx}% ao mes (pro rata die)`, margin + 4, y + 10)
+  doc.text(`Multa de ${config?.multa_atraso || 2}% sobre o valor da fatura + Juros de mora de ${config?.juros_mora || 2}% ao mes (pro rata die)`, margin + 4, y + 10)
 
   y += 20
 
@@ -382,12 +331,18 @@ export function gerarPDFFatura(dados: DadosFatura, empresa?: DadosEmpresaFatura,
     y += 5
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
-    const lines = doc.splitTextToSize(dados.observacoes, contentWidth)
-    doc.text(lines, margin, y)
+    doc.text(doc.splitTextToSize(dados.observacoes, contentWidth), margin, y)
   }
 
-  // Abrir PDF em nova aba
-  const pdfBlob = doc.output('blob')
-  const url = URL.createObjectURL(pdfBlob)
+  return doc
+}
+
+export function gerarPDFConsolidado(
+  dados: DadosConsolidado,
+  empresa?: DadosEmpresaConsolidado,
+  config?: ConfigPagamentoConsolidado
+) {
+  const doc = construirPDFConsolidado(dados, empresa, config)
+  const url = URL.createObjectURL(doc.output('blob'))
   window.open(url, '_blank')
 }
