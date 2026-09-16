@@ -84,6 +84,39 @@ export function contaPrincipal(config: any): ContaBancaria | null {
   return contas.find(c => c.principal) || contas[0]
 }
 
+/**
+ * Qual conta vai no PDF desta fatura, em ordem de prioridade:
+ *
+ * 1. a escolhida agora no seletor — troca deliberada do usuario;
+ * 2. a que ja foi enviada ao cliente nesta fatura — o cliente recebeu esses
+ *    dados, entao a segunda via nao pode mudar de conta sozinha;
+ * 3. a principal da configuracao.
+ */
+export function escolherContaDoPDF(
+  contaSelecionada: ContaBancaria | null | undefined,
+  contaDaFatura: any,
+  config: any
+): ContaBancaria | null {
+  if (contaSelecionada) return contaSelecionada
+
+  let gravada: any = contaDaFatura
+  try {
+    if (typeof gravada === 'string') gravada = JSON.parse(gravada)
+  } catch { gravada = null }
+
+  if (gravada && (gravada.nome || gravada.agencia || gravada.conta || gravada.titular)) {
+    return {
+      nome: texto(gravada.nome),
+      agencia: texto(gravada.agencia),
+      conta: texto(gravada.conta),
+      titular: texto(gravada.titular),
+      principal: Boolean(gravada.principal),
+    }
+  }
+
+  return contaPrincipal(config)
+}
+
 /** Uma linha por conta: "Itau | Ag: 1234 | Cc: 56789-0 | BRALOC LTDA" */
 export function descreverConta(conta: ContaBancaria): string {
   return `${conta.nome || '-'} | Ag: ${conta.agencia || '-'} | Cc: ${conta.conta || '-'}${conta.titular ? ` | ${conta.titular}` : ''}`

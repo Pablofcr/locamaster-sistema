@@ -22,9 +22,10 @@ import {
   cancelarFatura,
   calcularValorMedicao,
   obterPeriodoCobertoPelaFatura,
+  registrarContaDaFatura,
 } from '@/lib/faturamento'
 import { faturasDoContrato } from '@/lib/saldoFaturamento'
-import { lerContasBancarias, contaPrincipal, statusConfiguracao } from '@/lib/configuracaoPagamento'
+import { lerContasBancarias, escolherContaDoPDF, statusConfiguracao } from '@/lib/configuracaoPagamento'
 import {
   carregarRegras,
   executarReguaCobranca,
@@ -72,6 +73,7 @@ export default function FaturamentoPage() {
   const [gerandoConsolidado, setGerandoConsolidado] = useState(false)
   const [configPagamento, setConfigPagamento] = useState<any>(null)
   const [indiceContaPDF, setIndiceContaPDF] = useState(0)
+  const [contaTrocadaNoSeletor, setContaTrocadaNoSeletor] = useState(false)
   const [locacoesSelecionadas, setLocacoesSelecionadas] = useState<Set<number>>(new Set())
 
   // Parcelas state
@@ -129,13 +131,13 @@ export default function FaturamentoPage() {
   }
 
   /**
-   * A conta que vai no PDF: a principal, ou outra escolhida no seletor.
-   * A escolha vale para os PDFs gerados agora e volta para a principal ao
-   * recarregar a tela — ela nao fica gravada na fatura.
+   * A conta que vai no PDF. So conta como escolha o que o usuario mexeu no
+   * seletor: sem isso vale a conta ja informada ao cliente naquela fatura e,
+   * na falta dela, a principal.
    */
   const contasDisponiveis = lerContasBancarias(configPagamento)
-  const contaEscolhida = (config: any) =>
-    contasDisponiveis[indiceContaPDF] || contaPrincipal(config)
+  const contaDoPDF = (fatura: any, config: any) =>
+    escolherContaDoPDF(contaTrocadaNoSeletor ? lerContasBancarias(config)[indiceContaPDF] : null, fatura?.conta_pagamento, config)
 
   // Sem PIX nem banco, a fatura sai sem como o cliente pagar — a tela avisa
   const carregarConfigPagamento = async () => {
@@ -367,6 +369,7 @@ export default function FaturamentoPage() {
         .select('*')
         .limit(1)
       const config = configArr?.[0]
+      const contaDaFatura = contaDoPDF(fatura, config)
 
       // Período de medição para exibição no PDF: os dias que a fatura cobriu
       let periodoMedicao = await obterPeriodoCobertoPelaFatura(fatura)
@@ -431,10 +434,14 @@ export default function FaturamentoPage() {
         banco_conta: config.banco_conta,
         banco_titular: config.banco_titular,
         bancos: lerContasBancarias(config),
-        conta: contaEscolhida(config),
+        conta: contaDaFatura,
         juros_mora: config.juros_mora,
         multa_atraso: config.multa_atraso,
       } : undefined)
+
+      // Registra a conta que o cliente recebeu, para a segunda via sair igual
+      await registrarContaDaFatura(fatura.id, contaDaFatura)
+      carregarFaturas()
 
       showToast('PDF gerado com sucesso!', 'success')
     } catch { showToast('Erro ao gerar PDF', 'error') }
@@ -470,6 +477,8 @@ export default function FaturamentoPage() {
 
       const { data: configArr } = await supabase.from('configuracoes_faturamento').select('*').limit(1)
       const config = configArr?.[0]
+      // Um documento, uma conta: vale a da primeira fatura ou a escolhida agora
+      const contaDoDocumento = contaDoPDF(primeira, config)
 
       const ordenadas = [...selecionadas].sort((a, b) => (a.data_vencimento || '').localeCompare(b.data_vencimento || ''))
       const comPeriodo = await Promise.all(ordenadas.map(async f => ({
@@ -503,10 +512,14 @@ export default function FaturamentoPage() {
         banco_conta: config.banco_conta,
         banco_titular: config.banco_titular,
         bancos: lerContasBancarias(config),
-        conta: contaEscolhida(config),
+        conta: contaDoDocumento,
         juros_mora: config.juros_mora,
         multa_atraso: config.multa_atraso,
       } : undefined)
+
+      // Todas as faturas do documento receberam a mesma conta
+      for (const f of selecionadas) await registrarContaDaFatura(f.id, contaDoDocumento)
+      carregarFaturas()
     } catch {
       showToast('Erro ao gerar PDF consolidado', 'error')
     }
@@ -841,7 +854,8 @@ export default function FaturamentoPage() {
               {contasDisponiveis.length > 1 && (
                 <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t">
                   <label className="text-sm text-gray-600">Conta para o PDF:</label>
-                  <select value={indiceContaPDF} onChange={e => setIndiceContaPDF(Number(e.target.value))}
+                  <select value={indiceContaPDF}
+                    onChange={e => { setIndiceContaPDF(Number(e.target.value)); setContaTrocadaNoSeletor(true) }}
                     className="px-3 py-2 border border-gray-300 rounded-md text-sm">
                     {contasDisponiveis.map((c, i) => (
                       <option key={i} value={i}>

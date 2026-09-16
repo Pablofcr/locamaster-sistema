@@ -83,6 +83,22 @@ eq('formato antigo', c.contaPrincipal(configAntiga), lido(itau, true))
 eq('duas marcadas: vale a primeira marcada',
   c.contaPrincipal({ bancos: [itau, { ...bb, principal: true }, { ...itau, nome: 'Caixa', principal: true }] }), lido(bb, true))
 
+console.log('\n--- escolherContaDoPDF ---')
+const configDuas = { bancos: [{ ...itau, principal: true }, bb] }
+eq('escolha no seletor vence tudo',
+  c.escolherContaDoPDF(lido(bb), itau, configDuas), lido(bb))
+eq('sem escolha, vale a conta ja enviada ao cliente',
+  c.escolherContaDoPDF(null, bb, configDuas), lido(bb))
+eq('conta da fatura gravada como texto JSON',
+  c.escolherContaDoPDF(null, JSON.stringify(bb), configDuas), lido(bb))
+eq('fatura sem conta: vale a principal',
+  c.escolherContaDoPDF(null, null, configDuas), lido(itau, true))
+eq('conta da fatura vazia nao conta',
+  c.escolherContaDoPDF(null, { nome: '', agencia: '', conta: '', titular: '' }, configDuas), lido(itau, true))
+eq('JSON invalido na fatura cai para a principal',
+  c.escolherContaDoPDF(null, '{[', configDuas), lido(itau, true))
+eq('sem conta em lugar nenhum', c.escolherContaDoPDF(null, null, {}), null)
+
 console.log('\n--- descreverConta ---')
 eq('conta completa', c.descreverConta(itau), 'Itau | Ag: 1234 | Cc: 56789-0 | BRALOC LTDA')
 eq('sem titular', c.descreverConta({ nome: 'Caixa', agencia: '1', conta: '2', titular: '' }), 'Caixa | Ag: 1 | Cc: 2')

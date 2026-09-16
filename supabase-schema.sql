@@ -291,6 +291,11 @@ ALTER TABLE faturas ADD COLUMN IF NOT EXISTS motivo_cancelamento TEXT;
 ALTER TABLE faturas ADD COLUMN IF NOT EXISTS cliente_telefone TEXT;
 ALTER TABLE faturas ADD COLUMN IF NOT EXISTS cliente_email TEXT;
 
+-- Conta bancaria informada ao cliente no PDF desta fatura: { nome, agencia,
+-- conta, titular }. Gravada ao gerar o PDF, para a segunda via sair com a
+-- mesma conta mesmo que a conta principal mude depois.
+ALTER TABLE faturas ADD COLUMN IF NOT EXISTS conta_pagamento JSONB;
+
 -- Atualizar CHECK constraint do status para incluir 'parcial'
 ALTER TABLE faturas DROP CONSTRAINT IF EXISTS faturas_status_check;
 ALTER TABLE faturas ADD CONSTRAINT faturas_status_check

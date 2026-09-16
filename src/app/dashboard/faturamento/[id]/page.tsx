@@ -8,8 +8,8 @@ import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/components/ui/Toast'
 import { supabase } from '@/lib/supabase'
-import { formatarMoeda, formatarData, registrarPagamento, cancelarFatura, corrigirDataPagamento, obterPeriodoCobertoPelaFatura } from '@/lib/faturamento'
-import { lerContasBancarias, contaPrincipal } from '@/lib/configuracaoPagamento'
+import { formatarMoeda, formatarData, registrarPagamento, cancelarFatura, corrigirDataPagamento, obterPeriodoCobertoPelaFatura, registrarContaDaFatura } from '@/lib/faturamento'
+import { lerContasBancarias, escolherContaDoPDF, descreverConta } from '@/lib/configuracaoPagamento'
 import { obterLogCobranca, registrarAcaoManual, abrirWhatsApp, processarTemplate } from '@/lib/cobranca'
 import { gerarPDFFatura } from '@/lib/gerarPDFFatura'
 import { useEmpresa } from '@/contexts/EmpresaContext'
@@ -27,6 +27,7 @@ export default function FaturaDetalhePage() {
   const [cliente, setCliente] = useState<any>(null)
   const [configPagamento, setConfigPagamento] = useState<any>(null)
   const [indiceContaPDF, setIndiceContaPDF] = useState(0)
+  const [contaTrocadaNoSeletor, setContaTrocadaNoSeletor] = useState(false)
   const [pagamentos, setPagamentos] = useState<any[]>([])
   const [logCobranca, setLogCobranca] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -217,7 +218,12 @@ export default function FaturaDetalhePage() {
     try {
       const { data: configArr } = await supabase.from('configuracoes_faturamento').select('*').limit(1)
       const config = configArr?.[0]
-      const conta = lerContasBancarias(config)[indiceContaPDF] || contaPrincipal(config)
+      // So vale como escolha o que o usuario mexeu no seletor; senao, a conta ja enviada
+      const conta = escolherContaDoPDF(
+        contaTrocadaNoSeletor ? lerContasBancarias(config)[indiceContaPDF] : null,
+        fatura.conta_pagamento,
+        config
+      )
       const periodoMedicao = await obterPeriodoCobertoPelaFatura(fatura)
 
       const itens = locacao ? [{
@@ -262,6 +268,10 @@ export default function FaturaDetalhePage() {
         telefone: empresa.telefone,
         logo_base64: empresa.logo_base64,
       } : undefined, config ? { ...config, conta } : undefined)
+
+      // Registra a conta que o cliente recebeu, para a segunda via sair igual
+      await registrarContaDaFatura(fatura.id, conta)
+      carregarFatura()
     } catch { showToast('Erro ao gerar PDF', 'error') }
   }
 
@@ -299,7 +309,8 @@ export default function FaturaDetalhePage() {
         <div className="flex flex-wrap justify-end gap-2">
           {/* A conta que sai no PDF; so aparece quando ha mais de uma cadastrada */}
           {contasDisponiveis.length > 1 && (
-            <select value={indiceContaPDF} onChange={e => setIndiceContaPDF(Number(e.target.value))}
+            <select value={indiceContaPDF}
+              onChange={e => { setIndiceContaPDF(Number(e.target.value)); setContaTrocadaNoSeletor(true) }}
               title="Conta que aparece no PDF"
               className="px-3 py-2 border border-gray-300 rounded-md text-sm">
               {contasDisponiveis.map((c, i) => (
@@ -518,6 +529,19 @@ export default function FaturaDetalhePage() {
 
         {/* Coluna lateral - Resumo Financeiro */}
         <div className="space-y-6">
+          {/* A conta que o cliente recebeu no PDF desta fatura */}
+          {fatura.conta_pagamento && (
+            <Card>
+              <CardHeader><CardTitle>Conta Informada ao Cliente</CardTitle></CardHeader>
+              <CardContent>
+                <p className="text-sm text-gray-700">{descreverConta(fatura.conta_pagamento)}</p>
+                <p className="text-xs text-gray-500 mt-2">
+                  A segunda via sai com esta conta. Para mudar, escolha outra no seletor ao lado do botao PDF e gere de novo.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader><CardTitle>Resumo Financeiro</CardTitle></CardHeader>
             <CardContent className="space-y-3">

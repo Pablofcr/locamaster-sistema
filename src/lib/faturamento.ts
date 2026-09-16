@@ -2,6 +2,7 @@ import { supabase } from './supabase'
 import { hojeISO } from '@/lib/data'
 import { proximoSequencial } from '@/lib/numeracao'
 import { partesDoMes, faturasDoContrato, saldoAFaturar, comporMes, periodoCobertoPelaFatura, FaturaDoPeriodo, ComposicaoDoMes } from '@/lib/saldoFaturamento'
+import { ContaBancaria } from '@/lib/configuracaoPagamento'
 
 // ============ HELPERS ============
 
@@ -646,6 +647,24 @@ export async function corrigirDataPagamento(pagamentoId: number, faturaId: numbe
       updated_at: new Date().toISOString(),
     }).eq('id', faturaId)
   }
+}
+
+// ============ CONTA INFORMADA AO CLIENTE ============
+
+/**
+ * Guarda na fatura a conta bancaria que saiu no PDF.
+ *
+ * O cliente recebeu esses dados para depositar, entao a segunda via tem de
+ * sair com a mesma conta — mesmo que a conta principal mude depois. Regravar
+ * so acontece quando o usuario troca a conta no seletor e gera de novo.
+ *
+ * Nao interrompe a geracao do PDF se falhar: o documento ja foi aberto.
+ */
+export async function registrarContaDaFatura(faturaId: number, conta: ContaBancaria | null) {
+  if (!faturaId || !conta) return
+  try {
+    await supabase.from('faturas').update({ conta_pagamento: conta }).eq('id', faturaId)
+  } catch { /* o PDF ja saiu; a conta so nao ficou registrada */ }
 }
 
 // ============ CANCELAR FATURA ============
