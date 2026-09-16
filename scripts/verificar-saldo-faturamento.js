@@ -154,5 +154,22 @@ eq('duas faturas em sequencia, mes fechado',
 eq('arredondamento de centavo nao cria um dia a mais',
   s.comporMes(partesAgo, [{ numero: 'FAT-A', status: 'pago', valor: 2879.99 }], 4080).faturadas[0].data_fim, '2026-08-12')
 
+console.log('\n--- periodoCobertoPelaFatura ---')
+const faturasAgo = [
+  { numero: 'FAT-2026-025', status: 'pago', valor: 2880 },
+  { numero: 'FAT-2026-026', status: 'emitido', valor: 4080 },
+]
+eq('fatura da renovacao: so os dias dela',
+  s.periodoCobertoPelaFatura(partesAgo, faturasAgo, 'FAT-2026-026'), { data_inicio: '2026-08-13', data_fim: '2026-08-30' })
+eq('fatura do original',
+  s.periodoCobertoPelaFatura(partesAgo, faturasAgo, 'FAT-2026-025'), { data_inicio: '2026-08-01', data_fim: '2026-08-12' })
+eq('mes inteiro sem renovacao: do dia 1 ao ultimo dia faturavel',
+  s.periodoCobertoPelaFatura(
+    s.partesDoMes([{ data_inicio: '2025-10-21', data_fim: '2026-01-31', valor_total: 5000 }], '2025-11'),
+    [{ numero: 'FAT-2026-016', status: 'pago', valor: 5000 }], 'FAT-2026-016'),
+  { data_inicio: '2025-11-01', data_fim: '2025-11-30' })
+eq('fatura fora da lista (ex.: cancelada): null',
+  s.periodoCobertoPelaFatura(partesAgo, faturasAgo, 'FAT-2026-099'), null)
+
 console.log(falhas === 0 ? '\nTudo certo.' : `\n${falhas} verificacao(oes) falharam.`)
 process.exit(falhas === 0 ? 0 : 1)

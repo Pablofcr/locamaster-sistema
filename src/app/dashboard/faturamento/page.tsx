@@ -21,7 +21,9 @@ import {
   registrarPagamento,
   cancelarFatura,
   calcularValorMedicao,
+  obterPeriodoCobertoPelaFatura,
 } from '@/lib/faturamento'
+import { faturasDoContrato } from '@/lib/saldoFaturamento'
 import {
   carregarRegras,
   executarReguaCobranca,
@@ -288,9 +290,13 @@ export default function FaturamentoPage() {
           locacaoPrincipal = locacoesUnificadas[0]
           todasLocacoes = locacoesUnificadas
           itens = locacoesUnificadas.map(loc => {
-            const valorMedicao = fatura.periodo_referencia
-              ? calcularValorMedicao(loc, fatura.periodo_referencia)
-              : Number(loc.valor_total) || 0
+            // A parte do contrato gravada na fatura; numa renovacao e menor que a medicao do mes
+            const parteNaFatura = faturasDoContrato([fatura], loc)?.[0]?.valor
+            const valorMedicao = parteNaFatura !== undefined
+              ? parteNaFatura
+              : fatura.periodo_referencia
+                ? calcularValorMedicao(loc, fatura.periodo_referencia)
+                : Number(loc.valor_total) || 0
             return {
               equipamento_nome: `${loc.numero} - ${loc.equipamento_nome || loc.equipamentos?.nome || ''}`,
               equipamento_marca: loc.equipamentos?.marca || '',
@@ -335,9 +341,9 @@ export default function FaturamentoPage() {
         .limit(1)
       const config = configArr?.[0]
 
-      // Calcular período de medição para exibição no PDF
-      let periodoMedicao = ''
-      if (fatura.periodo_referencia && todasLocacoes.length > 0) {
+      // Período de medição para exibição no PDF: os dias que a fatura cobriu
+      let periodoMedicao = await obterPeriodoCobertoPelaFatura(fatura)
+      if (!periodoMedicao && fatura.periodo_referencia && todasLocacoes.length > 0) {
         const [anoRef, mesRef] = fatura.periodo_referencia.split('-').map(Number)
         const ultimoDiaMes = new Date(anoRef, mesRef, 0).getDate()
         const fimMes = `${anoRef}-${String(mesRef).padStart(2, '0')}-${String(ultimoDiaMes).padStart(2, '0')}`

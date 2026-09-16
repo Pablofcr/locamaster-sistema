@@ -1,7 +1,7 @@
 import { supabase } from './supabase'
 import { hojeISO } from '@/lib/data'
 import { proximoSequencial } from '@/lib/numeracao'
-import { partesDoMes, faturasDoContrato, saldoAFaturar, comporMes, FaturaDoPeriodo, ComposicaoDoMes } from '@/lib/saldoFaturamento'
+import { partesDoMes, faturasDoContrato, saldoAFaturar, comporMes, periodoCobertoPelaFatura, FaturaDoPeriodo, ComposicaoDoMes } from '@/lib/saldoFaturamento'
 
 // ============ HELPERS ============
 
@@ -169,6 +169,40 @@ function calcularValorAFaturar(
   const jaFaturado = faturadas.reduce((s, f) => s + f.valor, 0)
   const saldo = saldoAFaturar(medicao, jaFaturado)
   return { valor: saldo, composicao: comporMes(partes, faturadas, saldo) }
+}
+
+/**
+ * Periodo que a fatura cobriu, para o PDF: "13/08/2026 a 30/08/2026".
+ *
+ * Numa fatura de contrato renovado sao so os dias dela — nao o contrato
+ * inteiro. Na fatura unificada, do primeiro ao ultimo dia entre os contratos.
+ * Vazio quando nao da para saber (fatura sem mes de referencia ou cancelada).
+ */
+export async function obterPeriodoCobertoPelaFatura(fatura: any): Promise<string> {
+  if (!fatura?.periodo_referencia) return ''
+
+  const numeros = (fatura.locacao_numero || '').split(',').map((n: string) => n.trim()).filter(Boolean)
+  const consulta = supabase.from('locacoes').select('*')
+  const { data: locacoes } = numeros.length > 0
+    ? await consulta.in('numero', numeros)
+    : await consulta.eq('id', fatura.locacao_id)
+  if (!locacoes || locacoes.length === 0) return ''
+
+  const faturasPeriodo = await obterFaturasDoPeriodo(fatura.periodo_referencia)
+
+  let inicio = ''
+  let fim = ''
+  for (const locacao of locacoes) {
+    const doContrato = faturasDoContrato(faturasPeriodo, locacao)
+    if (!doContrato) continue
+    const partes = partesDoMes(obterPeriodosContrato(locacao), fatura.periodo_referencia)
+    const periodo = periodoCobertoPelaFatura(partes, doContrato, fatura.numero)
+    if (!periodo) continue
+    if (!inicio || periodo.data_inicio < inicio) inicio = periodo.data_inicio
+    if (!fim || periodo.data_fim > fim) fim = periodo.data_fim
+  }
+
+  return inicio ? `${formatarData(inicio)} a ${formatarData(fim)}` : ''
 }
 
 /** Observacao da parte pendente: "Renovação 1 — período 13/08/2026 a 30/08/2026" */

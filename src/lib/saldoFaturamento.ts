@@ -171,6 +171,20 @@ export function saldoAFaturar(valorMedicao: number, valorFaturado: number): numb
 }
 
 /**
+ * Os dias do mes que uma fatura cobriu, pela mesma distribuicao de comporMes.
+ * null quando a fatura nao esta entre as do contrato (ex.: cancelada).
+ */
+export function periodoCobertoPelaFatura(
+  partes: ParteDoMes[],
+  faturas: FaturaDoContrato[],
+  numeroFatura: string
+): { data_inicio: string; data_fim: string } | null {
+  const fatura = comporMes(partes, faturas, 0).faturadas.find(f => f.numero === numeroFatura)
+  if (!fatura || !fatura.data_inicio) return null
+  return { data_inicio: fatura.data_inicio, data_fim: fatura.data_fim }
+}
+
+/**
  * Associa cada fatura as partes do mes que ela cobriu e diz o que falta.
  *
  * A fatura nao guarda as datas que cobriu, entao os valores sao distribuidos

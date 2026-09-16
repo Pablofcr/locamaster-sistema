@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/components/ui/Toast'
 import { supabase } from '@/lib/supabase'
 import { gerarContratoLocacao } from '@/lib/gerarContratoLocacao'
+import { gerarPDFOrcamento } from '@/lib/gerarPDFOrcamento'
 import { criarLocacaoDoOrcamento } from '@/lib/verificarDisponibilidade'
 import { useEmpresa } from '@/contexts/EmpresaContext'
 import { useRouter, useParams } from 'next/navigation'
@@ -120,6 +121,38 @@ export default function OrcamentoDetalhePage() {
       }
     } catch (err: any) {
       showToast('Erro ao atualizar status: ' + err.message, 'error')
+    }
+  }
+
+  // PDF do orcamento em qualquer status: o aprovado nao abre a tela de edicao, onde o botao ficava
+  const baixarPDFOrcamento = async () => {
+    try {
+      const { data: cliente } = await supabase.from('clientes').select('*').eq('id', orcamento.cliente_id).single()
+      let itensOrcamento: any[] = []
+      try { itensOrcamento = typeof orcamento.itens === 'string' ? JSON.parse(orcamento.itens) : (orcamento.itens || []) } catch { itensOrcamento = [] }
+
+      gerarPDFOrcamento({
+        numero: orcamento.numero_orcamento || undefined,
+        clienteNome: cliente?.nome || orcamento.cliente_nome || '',
+        clienteNomeFantasia: cliente?.nome_fantasia || '',
+        clienteTelefone: cliente?.telefone || orcamento.cliente_telefone || '',
+        clienteEmail: cliente?.email || orcamento.cliente_email || '',
+        clienteDocumento: cliente?.cpf_cnpj || cliente?.documento || '',
+        modalidade: orcamento.modalidade_locacao || 'mensal',
+        diasLocacao: orcamento.dias_locacao || 30,
+        dataInicio: orcamento.data_inicio_locacao || undefined,
+        dataFim: orcamento.data_fim_locacao || undefined,
+        itens: itensOrcamento,
+        subtotal: Number(orcamento.subtotal) || 0,
+        desconto: Number(orcamento.desconto_valor) || 0,
+        frete: Number(orcamento.valor_frete) || 0,
+        total: Number(orcamento.valor_total) || 0,
+        observacoes: orcamento.observacoes || undefined,
+        formaPagamento: orcamento.forma_pagamento || undefined,
+        condicaoPagamento: orcamento.condicao_pagamento || undefined,
+      }, empresa || undefined)
+    } catch (err) {
+      showToast('Erro ao gerar PDF do orcamento', 'error')
     }
   }
 
@@ -385,6 +418,9 @@ export default function OrcamentoDetalhePage() {
                     </Button>
                   </>
                 )}
+                <Button onClick={baixarPDFOrcamento} variant="outline" className="w-full">
+                  Baixar PDF do Orcamento
+                </Button>
                 <Button onClick={enviarEmail} variant="outline" className="w-full">
                   Enviar por Email
                 </Button>

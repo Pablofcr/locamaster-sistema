@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
 import { useToast } from '@/components/ui/Toast'
 import { supabase } from '@/lib/supabase'
-import { formatarMoeda, formatarData, registrarPagamento, cancelarFatura, corrigirDataPagamento } from '@/lib/faturamento'
+import { formatarMoeda, formatarData, registrarPagamento, cancelarFatura, corrigirDataPagamento, obterPeriodoCobertoPelaFatura } from '@/lib/faturamento'
 import { obterLogCobranca, registrarAcaoManual, abrirWhatsApp, processarTemplate } from '@/lib/cobranca'
 import { gerarPDFFatura } from '@/lib/gerarPDFFatura'
 import { useEmpresa } from '@/contexts/EmpresaContext'
@@ -200,6 +200,7 @@ export default function FaturaDetalhePage() {
     try {
       const { data: configArr } = await supabase.from('configuracoes_faturamento').select('*').limit(1)
       const config = configArr?.[0]
+      const periodoMedicao = await obterPeriodoCobertoPelaFatura(fatura)
 
       const itens = locacao ? [{
         equipamento_nome: locacao.equipamento_nome || locacao.equipamentos?.nome || '',
@@ -227,6 +228,7 @@ export default function FaturaDetalhePage() {
         locacao_numero: fatura.locacao_numero,
         locacao_data_inicio: locacao?.data_inicio,
         locacao_data_fim: locacao?.data_fim,
+        periodo_medicao: periodoMedicao || undefined,
         itens,
         valor_original: Number(fatura.valor_original || fatura.valor) || 0,
         valor_desconto: Number(fatura.valor_desconto) || 0,
